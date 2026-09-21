@@ -82,38 +82,32 @@ pub fn Groups() -> impl IntoView {
 
             <ErrorBanner message=error />
 
-            <Show when=move || can_write.get()>
-                <CreateGroupForm create=create parents=parents />
-            </Show>
+            // The form and the table share one suspense boundary because both
+            // read the same resource. The parent dropdown's options are built
+            // from the loaded groups, so rendering the form outside the
+            // boundary made the server emit one option and the hydrating
+            // client render two — an SSR/hydration mismatch that aborts
+            // hydration for the entire page, table included.
+            <Transition fallback=|| {
+                view! { <p class="text-sm text-ink-500">"Loading groups…"</p> }
+            }>
+                {move || Suspend::new(async move {
+                    let list = match groups.await {
+                        Ok(list) => list,
+                        Err(failure) => {
+                            let message = api::describe(&failure);
+                            return view! { <ErrorBanner message=Some(message) /> }.into_any();
+                        }
+                    };
 
-            <GroupTable groups=groups can_write=can_write remove=remove />
-        </div>
-    }
-}
+                    let rows = Signal::derive(move || list.clone());
 
-/// The tree itself, or whatever went wrong loading it.
-#[component]
-fn GroupTable(
-    /// The loaded groups.
-    groups: Resource<Result<Vec<api::GroupSummary>, ServerFnError>>,
-    /// Whether the viewer may change anything.
-    can_write: Signal<bool>,
-    /// The delete action.
-    remove: ServerAction<api::DeleteGroup>,
-) -> impl IntoView {
-    view! {
-        <Transition fallback=|| {
-            view! { <p class="text-sm text-ink-500">"Loading groups…"</p> }
-        }>
-            {move || Suspend::new(async move {
-                match groups.await {
-                    Err(failure) => {
-                        let message = api::describe(&failure);
-                        view! { <ErrorBanner message=Some(message) /> }.into_any()
-                    }
-                    Ok(list) => {
-                        let rows = Signal::derive(move || list.clone());
-                        view! {
+                    view! {
+                        <div class="flex flex-col gap-6">
+                            <Show when=move || can_write.get()>
+                                <CreateGroupForm create=create parents=parents />
+                            </Show>
+
                             <DataTable
                                 headers=vec!["Group", "Roles", "Members", ""]
                                 rows=rows
@@ -129,12 +123,12 @@ fn GroupTable(
                                     }
                                 }
                             />
-                        }
-                            .into_any()
+                        </div>
                     }
-                }
-            })}
-        </Transition>
+                        .into_any()
+                })}
+            </Transition>
+        </div>
     }
 }
 

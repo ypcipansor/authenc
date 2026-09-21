@@ -43,6 +43,9 @@ just build        # cargo leptos build --release. Run before pushing a page chan
 just test         # tests only
 just migrate      # apply pending migrations
 just sqlx-prepare # regenerate .sqlx offline data after changing any query
+just demo-data    # invented, idempotent rows for the console pages
+just screenshots  # capture every page into docs/screenshots/ (needs `just serve`)
+just screenshot-check  # re-read those PNGs and fail on a blank or white one
 ```
 
 `just check` deliberately stops short of the release wasm build, which takes

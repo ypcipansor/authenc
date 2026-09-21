@@ -1140,9 +1140,19 @@ pub async fn delete_provider(
 /// Render a server-function failure as something a person can read.
 ///
 /// One place to do this, so no page invents its own error string.
+///
+/// A `ServerError` carries the message the server chose, already stripped of
+/// internal detail by `to_server_fn_error`. Displaying the whole
+/// [`ServerFnError`] instead would prepend Leptos's own
+/// `"error running server function: "` wrapper, so a wrong password read as
+/// *"error running server function: authentication required"* — an internal
+/// phrase shown to a person at the one moment they are already stuck.
 #[must_use]
 pub fn describe(error: &ServerFnError) -> String {
-    error.to_string()
+    match error {
+        ServerFnError::ServerError(message) => message.clone(),
+        other => other.to_string(),
+    }
 }
 
 /// Begin a password reset.

@@ -19,12 +19,12 @@ security fixes.
 
 ## Current status
 
-**This software has not had an independent security review.** Authentication
-and the OAuth 2.0 / OpenID Connect provider work and are tested; multi-factor
-authentication and the audit log do not exist yet. Do not deploy it as a
-production identity provider. [ROADMAP.md](ROADMAP.md) states precisely what is
-implemented, including the parts of the specifications that are deliberately
-not implemented.
+**This software has not had an independent security review.** Authentication,
+multi-factor authentication, the audit log, and the OAuth 2.0 / OpenID Connect
+provider work and are tested. Do not deploy it as a production identity
+provider. [ROADMAP.md](ROADMAP.md) states precisely what is implemented,
+including the parts of the specifications that are deliberately not
+implemented.
 
 The tree before August 2026 (tag `archive/pre-refactor`) contains authentication
 bypasses — authenticators that returned success without verifying anything,

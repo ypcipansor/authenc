@@ -167,10 +167,10 @@ Deliberate limits, stated rather than implied:
 - **Recovery codes do not count as an enrolled factor.** They are a way past a
   lost one. If they counted, generating them would silently turn on MFA for an
   account with no authenticator and lock the user out at the next login.
-- **A session records how it was authenticated (`amr`), but ID tokens do not
-  yet carry it.** The value would have to travel with the authorization code
-  and the refresh family; until that is built, it is an audit record, not a
-  claim, and nothing advertises otherwise.
+- **A session records how it was authenticated (`amr`), and ID tokens carry
+  it.** The value is snapshotted onto the authorization code and then onto the
+  refresh family, rather than recomputed at issuance; access tokens carry none.
+  See Stage 6 for why.
 - **`webauthn-rs 0.5` pulls in OpenSSL**, which `deny.toml` otherwise bans. It
   is admitted through one narrow wrapper exception with the reasoning and the
   exit condition written down there: 0.6 drops OpenSSL for pure Rust and exists
@@ -182,13 +182,13 @@ Deliberate limits, stated rather than implied:
   value it produces is verified server-side against a challenge the server
   chose and stored.
 
-## Planned
+## Delivered, continued
 
 Each stage leaves the repository compiling, linted, and tested.
 
 ### Stage 6 — Audit and events
 
-**Delivered so far:** one event model in `contract::event` — `Action::ALL` is
+**Delivered.** One event model in `contract::event` — `Action::ALL` is
 the complete list of what this system can record, so a renamed variant is a
 compile error rather than a silent gap. Events go to `audit_events` in
 PostgreSQL, queryable by action, namespace prefix, outcome, actor, and time
@@ -420,6 +420,23 @@ workspace already declined once).
 social login: no directory's credentials can run in CI, and standing up
 OpenLDAP for these tests would exercise `ldap3` rather than the rules above.
 What has not been exercised is a live OpenLDAP or Active Directory response.
+
+## Not built
+
+Stated plainly, because each of these is advertised by a specification this
+repository claims to implement:
+
+- **`plain` PKCE** — `S256` only; see Stage 4b for why.
+- **The implicit and hybrid flows** — `response_type=code` only.
+- **`client_credentials`** — machine-to-machine access is through a bound
+  account's API token instead.
+- **ID token signature verification at the social provider** — the claim
+  checks are done, the signature is not; `oauth::social` records why and what
+  would change it.
+- **DNS ownership verification for organisations** — an organisation can be
+  created but its domain cannot be proved; see Stage 7.
+- **Anything in the Removed table below** — those subsystems are gone and are
+  not planned.
 
 ## Removed, and why
 

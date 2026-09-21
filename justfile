@@ -29,6 +29,14 @@ db-down:
 migrate:
     sqlx migrate run --source migrations
 
+# Create a realm and an administrator in it, then print nothing else.
+#   just seed admin@example.com 'a long passphrase you will remember'
+#
+# The password travels in the environment rather than as an argument, which the
+# CLI asks for: an argument is visible in the process list and in shell history.
+seed email password:
+    AUTHENC_SEED_PASSWORD={{quote(password)}} cargo run -p authenc-server --bin authenc -- seed --email {{quote(email)}}
+
 # Create a new migration file.
 migration name:
     sqlx migrate add --source migrations {{name}}
@@ -115,6 +123,24 @@ audit:
     cargo deny check
     cargo audit
 
-# End-to-end tests against a running stack.
-e2e:
-    cd e2e && npx playwright test
+# Load the demo data the screenshots and the console pages are shown with.
+# Invented, idempotent, and safe to re-run.
+demo-data:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker exec -i authenc-postgres-1 psql -v ON_ERROR_STOP=1 -U postgres -d authenc \
+        < e2e/demo-data.sql
+
+# Run the server with its output captured, so `just screenshots` can read the
+# development mailer's reset link back out of it.
+serve:
+    cargo run -p authenc-server --bin authenc -- serve 2>&1 | tee /tmp/authenc-server.log
+
+# Capture every frontend page into docs/screenshots/.
+# Needs a running server (see `just serve`) and the demo data (`just demo-data`).
+screenshots:
+    bash e2e/capture-screenshots.sh
+
+# Re-read docs/screenshots/ and fail on a blank, white, or content-free image.
+screenshot-check:
+    python3 e2e/check-screenshots.py
