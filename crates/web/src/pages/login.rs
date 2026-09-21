@@ -60,9 +60,7 @@ fn login_failure(failure: &ServerFnError) -> String {
         "authentication required" => {
             "That realm, username, or password did not match an account.".to_owned()
         }
-        "too many requests" => {
-            "Too many attempts. Wait a moment, then try again.".to_owned()
-        }
+        "too many requests" => "Too many attempts. Wait a moment, then try again.".to_owned(),
         other => other.to_owned(),
     }
 }
