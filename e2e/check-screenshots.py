@@ -85,8 +85,15 @@ def main() -> int:
         print(f"no {report_path}; run `just screenshots` first", file=sys.stderr)
         return 1
 
-    captured = {entry["name"] for entry in json.loads(report_path.read_text())}
+    try:
+        entries = json.loads(report_path.read_text())
+    except json.JSONDecodeError as error:
+        print(f"{report_path} is not valid JSON: {error}", file=sys.stderr)
+        return 1
+
+    captured = {entry["name"] for entry in entries}
     images = sorted(p for p in SHOTS.glob("*.png"))
+    names_on_disk = {p.stem for p in images}
     if not images:
         print(f"no PNGs in {SHOTS}", file=sys.stderr)
         return 1
@@ -102,6 +109,27 @@ def main() -> int:
         failures += bool(problems)
         print(f"{status} {path.name:32} {', '.join(problems) or 'looks fine'}")
 
+    # The other direction: the report is the record of what the capture saw,
+    # and it is committed alongside the images. An entry that recorded a
+    # problem, answered with the wrong status, or names a file with no PNG is
+    # the same failure as a blank image — the capture said so and the report
+    # was committed anyway. Checking only PNG-against-name would let an entry
+    # with `problems` ride through unnoticed.
+    for entry in entries:
+        name = entry.get("name", "<unnamed>")
+        problems = list(entry.get("problems") or [])
+        expected = entry.get("expectedStatus")
+        actual = entry.get("status")
+        if expected is not None and actual != expected:
+            problems.append(f"status({actual} != {expected})")
+        if entry.get("settleError"):
+            problems.append("state-not-reached")
+        if name not in names_on_disk:
+            problems.append("no-image")
+        if problems:
+            print(f"FAIL report entry {name}: {', '.join(problems)}")
+            failures += 1
+
     referenced = _readme_references(SHOTS)
     orphans = sorted({p.name for p in images} - referenced)
     missing = sorted(referenced - {p.name for p in images})
@@ -112,7 +140,10 @@ def main() -> int:
         print(f"FAIL referenced by README but absent: {', '.join(missing)}")
         failures += 1
 
-    print(f"\n{len(images)} images, {len(referenced)} shown in README, {failures} with problems")
+    print(
+        f"\n{len(images)} images, {len(entries)} report entries, "
+        f"{len(referenced)} shown in README, {failures} with problems"
+    )
     return 1 if failures else 0
 
 

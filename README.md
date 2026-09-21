@@ -94,16 +94,19 @@ Requires Rust 1.94, Docker (for PostgreSQL), and
 git clone https://github.com/analisaperlengkapan/authenc.git
 cd authenc
 just setup    # toolchain, tools, database, migrations
-just seed admin@example.com 'a long passphrase you will remember'
+read -r -s AUTHENC_SEED_PASSWORD && export AUTHENC_SEED_PASSWORD   # not echoed
+just seed admin@example.com
 just dev      # http://localhost:3000/login, then /admin
 ```
 
 `just setup` copies `.env.example` to `.env`. Every setting is documented
 there.
 
-`just seed` creates a realm named `master` and an administrator in it. The
-password travels in the environment rather than as an argument, because an
-argument is visible in the process list and in shell history.
+`just seed` creates a realm named `master` and an administrator in it. It takes
+the password from `AUTHENC_SEED_PASSWORD` and never as an argument: an argument
+is visible in the process list, and `just seed … 'password'` would leave the
+password in the shell history no matter what the child process does with its own
+environment. Reading it with `read -r -s` keeps it out of both.
 
 Without `just`:
 
@@ -231,7 +234,8 @@ database. They need PostgreSQL running; they do not mock it.
 just db-up          # PostgreSQL
 just demo-data      # invented, idempotent rows for the console pages to render
 just serve          # in one terminal; logs to /tmp/authenc-server.log
-just screenshots    # in another: captures every page into docs/screenshots/
+# in another: the capture reads the same secret the seed used
+just screenshots
 just screenshot-check
 ```
 
@@ -240,12 +244,28 @@ just screenshot-check
 development mailer's log rather than inserting a token row directly. Capturing
 the page the real request produced is the point.
 
+It signs in with `DEMO_PASSWORD`, or with `AUTHENC_SEED_PASSWORD` if that is
+already exported from the seed, so one value covers both. There is deliberately
+no default: a published one would be a working administrator password for anyone
+following these steps. The capture reads it without echoing it, and signs in
+through the form, so the session cookie is the one the application issues.
+
+Node 20 or newer is required (see `e2e/screenshots/package-lock.json`). The
+first run installs Playwright's Chromium build and the packages pinned in the
+lockfile (`npm ci`), so a clean machine works once it can reach the registry;
+later runs are cache hits.
+
 `screenshot-check` re-reads the files on disk and fails on a blank, white, or
-content-free image. `capture.mjs` checks the page as it captured it, and fails
+content-free image, an image the report does not name, a report entry that
+recorded a problem or a status other than the one it expected, and a report
+entry with no image. `capture.mjs` checks the page as it captured it, and fails
 on a page that logged a JavaScript error, rendered the application's own error
-copy, overflowed horizontally, clipped a control, or never reached the
-interaction it was aiming for. A screenshot that looks fine in a directory
-listing is exactly the failure both exist to catch.
+copy, overflowed horizontally, clipped a control, answered with an unexpected
+HTTP status, or never reached the interaction it was aiming for. A screenshot
+that looks fine in a directory listing is exactly the failure both exist to
+catch. A capture that fails any page writes nothing into `docs/screenshots/`;
+the previous set stays in place and the failed run is left in a temporary
+directory to inspect.
 
 ## Documentation
 

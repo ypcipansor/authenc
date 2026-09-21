@@ -19,6 +19,12 @@ node_modules/
 /e2e/test-results/
 /e2e/playwright-report/
 
+# A failed screenshot capture leaves its output here for inspection rather than
+# overwriting the known-good set. It is not a deliverable and must not be
+# committed; a green run writes into `docs/screenshots/` and swaps it in whole.
+/docs/.screenshots-*/
+/docs/screenshots.previous-*/
+
 # NOTE: `Cargo.lock` is deliberately NOT ignored.
 #
 # This workspace produces a shipped binary, so the lockfile is part of the

@@ -29,13 +29,28 @@ db-down:
 migrate:
     sqlx migrate run --source migrations
 
-# Create a realm and an administrator in it, then print nothing else.
-#   just seed admin@example.com 'a long passphrase you will remember'
+# Create a realm and an administrator in it.
 #
-# The password travels in the environment rather than as an argument, which the
-# CLI asks for: an argument is visible in the process list and in shell history.
-seed email password:
-    AUTHENC_SEED_PASSWORD={{quote(password)}} cargo run -p authenc-server --bin authenc -- seed --email {{quote(email)}}
+# The password is taken from `AUTHENC_SEED_PASSWORD`, never an argument. A
+# `just seed ... 'password'` invocation would put the password in the shell
+# history no matter what the child process does with its own environment, so
+# the recipe does not accept one — and neither does an inline
+# `AUTHENC_SEED_PASSWORD=... just seed`, which is written to history too. Read
+# it into the environment without echoing it:
+#
+#   read -r -s AUTHENC_SEED_PASSWORD && export AUTHENC_SEED_PASSWORD
+#   just seed admin@example.com
+seed email:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${AUTHENC_SEED_PASSWORD:-}" ]; then
+        echo "AUTHENC_SEED_PASSWORD is not set." >&2
+        echo "Read it without echoing it, then re-run:" >&2
+        echo "  read -r -s AUTHENC_SEED_PASSWORD && export AUTHENC_SEED_PASSWORD" >&2
+        echo "  just seed {{email}}" >&2
+        exit 1
+    fi
+    cargo run -p authenc-server --bin authenc -- seed --email {{quote(email)}}
 
 # Create a new migration file.
 migration name:
@@ -137,7 +152,11 @@ serve:
     cargo run -p authenc-server --bin authenc -- serve 2>&1 | tee /tmp/authenc-server.log
 
 # Capture every frontend page into docs/screenshots/.
-# Needs a running server (see `just serve`) and the demo data (`just demo-data`).
+# Needs a running server (see `just serve`), the demo data (`just demo-data`),
+# and DEMO_PASSWORD exported to the seeded administrator's password. There is
+# no default password; the script refuses to run without one. If
+# AUTHENC_SEED_PASSWORD is already exported from `just seed`, the capture uses
+# it, so the seed password does not have to be exported twice.
 screenshots:
     bash e2e/capture-screenshots.sh
 
