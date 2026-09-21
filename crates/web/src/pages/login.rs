@@ -47,6 +47,24 @@ fn is_same_origin_path(value: &str) -> bool {
     }
 }
 
+/// What to tell somebody whose sign-in was refused.
+///
+/// `AppError::Unauthenticated` reads "authentication required" on the wire,
+/// which is the right thing for a client to branch on and the wrong thing to
+/// show a person who has just typed a password: it names the failure without
+/// naming the remedy. The same message covers an unknown user, a wrong
+/// password, and a disabled account — deliberately, so the page cannot be used
+/// to discover which usernames exist — so the wording must fit all three.
+fn login_failure(failure: &ServerFnError) -> String {
+    match api::describe(failure).as_str() {
+        "authentication required" => {
+            "That realm, username, or password did not match an account.".to_owned()
+        }
+        "too many requests" => "Too many attempts. Wait a moment, then try again.".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
 /// The sign-in page: a password, and then a second factor if one is enrolled.
 ///
 /// Split into two components because the two steps are two different things.
@@ -115,7 +133,7 @@ fn PasswordStep(prompt: RwSignal<Option<SecondFactorPrompt>>) -> impl IntoView {
                 error.set(None);
                 prompt.set(Some(asked));
             }
-            Err(failure) => error.set(Some(api::describe(&failure))),
+            Err(failure) => error.set(Some(login_failure(&failure))),
         }
     });
 

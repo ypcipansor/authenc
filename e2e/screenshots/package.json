@@ -1,0 +1,12 @@
+{
+  "name": "authenc-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Captures every frontend page into docs/screenshots/.",
+  "scripts": {
+    "capture": "node capture.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

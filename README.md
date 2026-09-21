@@ -3,11 +3,80 @@
 Identity and access management, built as one Rust workspace: a Leptos
 server-rendered frontend and an Axum backend over PostgreSQL.
 
-> **Status: foundation, authentication, and the OAuth/OIDC provider.** This
-> repository was rebuilt from
+> **Status: foundation, authentication, multi-factor authentication, the audit
+> log, and the OAuth/OIDC provider.** This repository was rebuilt from
 > scratch in August 2026. What is documented below is implemented and tested;
 > everything else is in [ROADMAP.md](ROADMAP.md) and is not claimed to exist.
 > It has not had an independent security review — see [SECURITY.md](SECURITY.md).
+
+## Screenshots
+
+Every page the application serves, captured from a running instance with
+`just screenshots` and checked by `just screenshot-check`. The pages that need
+a live token — a password-reset link, a confirmation link — are captured with a
+token the running server minted, not one written into the database, so what is
+shown is what the request path produces.
+
+### Sign in, and the pages around it
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/home.png" alt="Home page: the service name, a one-line description, and a server status panel reporting version 0.1.0 and a connected database."><br><b>Home</b> — server status, rendered server-side.</td>
+<td width="50%"><img src="docs/screenshots/login.png" alt="Sign-in form with realm, username or email, and password fields, a Sign in button, and a divider above a Continue with GitHub button."><br><b>Sign in</b> — realm, identifier, password, and any configured social provider.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/login-error.png" alt="The sign-in form showing the message: That realm, username, or password did not match an account."><br><b>A failed sign-in</b> — one message for a wrong password and an unknown user alike, so the page does not say which accounts exist.</td>
+<td><img src="docs/screenshots/forgot-password.png" alt="Reset your password form with a realm field, an email field, and a Send reset link button."><br><b>Reset request</b> — never reveals whether the address is registered.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/forgot-password-sent.png" alt="A confirmation panel reading: If that address belongs to an account, a reset link is on its way. The link is valid for one hour."><br><b>Reset requested</b> — the same confirmation whatever was typed.</td>
+<td><img src="docs/screenshots/reset-password-form.png" alt="Choose a new password, with new password and confirm password fields and a Set password button."><br><b>Choose a new password</b> — reached with a real single-use token.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/reset-password.png" alt="Choose a new password page reporting: This link is missing its token. Request a new one from the reset page."><br><b>A spent or missing reset link</b> — the token is single-use, so the second visit says so rather than reusing it.</td>
+<td><img src="docs/screenshots/verify-email-confirmed.png" alt="Confirm your email page reading: Your email address is confirmed, with a Sign in link."><br><b>Email confirmed</b> — reached with a real single-use token.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/verify-email.png" alt="Confirm your email page reporting: This link is missing its token."><br><b>A spent confirmation link</b> — the same page, without a usable token.</td>
+<td><img src="docs/screenshots/not-found.png" alt="Not found page reading: That page does not exist, with a Back to the start link."><br><b>Not found</b> — served with a real HTTP 404, not a 200 with a friendly body.</td>
+</tr>
+</table>
+
+### The account area
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/security.png" alt="Security page listing two-step verification, an authenticator app panel marked Not enrolled, and a passkeys panel with no passkeys registered."><br><b>Security</b> — the second factors enrolled on this account.</td>
+<td width="50%"><img src="docs/screenshots/security-enrol.png" alt="The authenticator app panel after starting enrolment: an instruction line, the shared secret in monospace, a code field, and a Confirm button."><br><b>Enrolling an authenticator</b> — the secret is issued by the server; the code is checked against it.</td>
+</tr>
+<tr>
+<td colspan="2"><img src="docs/screenshots/consent.png" alt="Approve access page: Web Console wants access to your account admin, followed by a bulleted list of the scopes requested, with Allow and Deny buttons."><br><b>Consent</b> — the scopes are listed individually and the approved set is what gets recorded. The form posts without JavaScript.</td>
+</tr>
+</table>
+
+### The admin console
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/admin-overview.png" alt="Overview page naming the signed-in administrator and listing the permissions they hold, such as realm:read."><br><b>Overview</b> — the permissions in force, resolved from the database.</td>
+<td width="50%"><img src="docs/screenshots/admin-users.png" alt="Users page: an Add a user form above a table of five accounts with enabled state, first and last name, and per-row actions."><br><b>Users</b> — creation and the accounts that exist.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/admin-users-filled.png" alt="The same Users page with the Add a user form filled in with a username, email, and password."><br><b>Adding a user</b> — the form as it looks mid-entry.</td>
+<td><img src="docs/screenshots/admin-groups.png" alt="Groups page: a note that a member of a group holds its ancestors' roles, a create form, and a table of the engineering group and its two children."><br><b>Groups</b> — a tree, with inheritance running upward.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/admin-roles.png" alt="Roles page listing the admin, auditor, and support roles with their descriptions."><br><b>Roles</b> — each role's description, and what it grants.</td>
+<td><img src="docs/screenshots/admin-organizations.png" alt="Organisations page: a note that suspending stops members signing in, and a table listing the Acme Corporation organisation."><br><b>Organisations</b> — a tenant boundary inside the realm.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/admin-providers.png" alt="Social login page explaining that each provider is configured per realm, with a table listing a GitHub provider."><br><b>Social login</b> — providers per realm, with the client secret sealed at rest.</td>
+<td><img src="docs/screenshots/admin-clients.png" alt="OAuth clients page: a register-a-client form, a note that the secret is shown once, and a table listing the Web Console public client."><br><b>OAuth clients</b> — redirect URIs matched exactly; a public client holds no secret.</td>
+</tr>
+<tr>
+<td colspan="2"><img src="docs/screenshots/admin-audit.png" alt="Audit page: namespace and refusals-only filters above a table of events with when, action, who, what, from, and outcome columns, with refused attempts marked."><br><b>Audit</b> — who did what, from where, and whether it worked. Reuse of a spent refresh token is recorded as the evidence it is.</td>
+</tr>
+</table>
 
 ## Why it is built this way
 
@@ -25,12 +94,19 @@ Requires Rust 1.94, Docker (for PostgreSQL), and
 git clone https://github.com/analisaperlengkapan/authenc.git
 cd authenc
 just setup    # toolchain, tools, database, migrations
-just seed admin@example.com 'a long passphrase you will remember'
+read -r -s AUTHENC_SEED_PASSWORD && export AUTHENC_SEED_PASSWORD   # not echoed
+just seed admin@example.com
 just dev      # http://localhost:3000/login, then /admin
 ```
 
 `just setup` copies `.env.example` to `.env`. Every setting is documented
 there.
+
+`just seed` creates a realm named `master` and an administrator in it. It takes
+the password from `AUTHENC_SEED_PASSWORD` and never as an argument: an argument
+is visible in the process list, and `just seed … 'password'` would leave the
+password in the shell history no matter what the child process does with its own
+environment. Reading it with `read -r -s` keeps it out of both.
 
 Without `just`:
 
@@ -53,6 +129,7 @@ crates/web        Leptos pages, components, server fns   — wasm + native
 crates/server     composition root, HTTP stack, CLI      — native
 migrations/       sqlx migrations, applied at startup
 docs/             architecture, security model, deployment
+e2e/              demo data, screenshot capture, screenshot checks
 ```
 
 Dependencies run one way: `contract ← identity ← oauth ← server` and
@@ -82,7 +159,7 @@ is enforced rather than merely intended.
 | Password reset | single-use expiring link; completing it revokes every session and lifts the lockout |
 | Email verification | single-use expiring link; a link cannot verify an address changed after it was sent |
 | Mail | SMTP via lettre, or a logging transport for development that production refuses to start with |
-| Admin console | server-rendered pages for users and roles, with a session guard that redirects on the server |
+| Admin console | server-rendered pages for users, roles, groups, organisations, providers, clients, and the audit trail, with a session guard that redirects on the server |
 | RBAC | typed permissions checked in the use case, resolved from the database per request |
 | REST API | `/api/v1` for automation, with an OpenAPI document at `/api/v1/openapi.json` |
 | Tenant isolation | an actor cannot read or change anything in another realm, and gets 404 rather than 403 |
@@ -150,6 +227,45 @@ Two things to know before your first change:
 
 Database tests use `#[sqlx::test]`, which gives each test its own throwaway
 database. They need PostgreSQL running; they do not mock it.
+
+### Regenerating the screenshots
+
+```bash
+just db-up          # PostgreSQL
+just demo-data      # invented, idempotent rows for the console pages to render
+just serve          # in one terminal; logs to /tmp/authenc-server.log
+# in another: the capture reads the same secret the seed used
+just screenshots
+just screenshot-check
+```
+
+`just screenshots` needs a server whose output is going to
+`/tmp/authenc-server.log`, because it reads the password-reset link out of the
+development mailer's log rather than inserting a token row directly. Capturing
+the page the real request produced is the point.
+
+It signs in with `DEMO_PASSWORD`, or with `AUTHENC_SEED_PASSWORD` if that is
+already exported from the seed, so one value covers both. There is deliberately
+no default: a published one would be a working administrator password for anyone
+following these steps. The capture reads it without echoing it, and signs in
+through the form, so the session cookie is the one the application issues.
+
+Node 20 or newer is required (see `e2e/screenshots/package-lock.json`). The
+first run installs Playwright's Chromium build and the packages pinned in the
+lockfile (`npm ci`), so a clean machine works once it can reach the registry;
+later runs are cache hits.
+
+`screenshot-check` re-reads the files on disk and fails on a blank, white, or
+content-free image, an image the report does not name, a report entry that
+recorded a problem or a status other than the one it expected, and a report
+entry with no image. `capture.mjs` checks the page as it captured it, and fails
+on a page that logged a JavaScript error, rendered the application's own error
+copy, overflowed horizontally, clipped a control, answered with an unexpected
+HTTP status, or never reached the interaction it was aiming for. A screenshot
+that looks fine in a directory listing is exactly the failure both exist to
+catch. A capture that fails any page writes nothing into `docs/screenshots/`;
+the previous set stays in place and the failed run is left in a temporary
+directory to inspect.
 
 ## Documentation
 

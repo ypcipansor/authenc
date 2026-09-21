@@ -6,11 +6,12 @@ rather than describing an intention as a property.
 
 ## Status
 
-Stages 1 to 4b of the rebuild. Passwords, sessions, CSRF, brute-force lockout,
+Stages 1 to 8 of the rebuild. Passwords, sessions, CSRF, brute-force lockout,
 credential recovery, authorisation, tenant isolation, configuration, transport
-headers, error handling, and the OAuth 2.0 / OpenID Connect provider are in
-place and tested. Multi-factor authentication does not exist yet, and neither
-does an audit log.
+headers, error handling, multi-factor authentication, the audit log, groups,
+organisations, federation, and the OAuth 2.0 / OpenID Connect provider are in
+place and tested. [ROADMAP.md](../ROADMAP.md) lists the parts of each
+specification that are deliberately not implemented.
 
 ## Threat model
 

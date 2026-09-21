@@ -218,6 +218,7 @@ pub struct SecurityConfig {
     /// The previous server parsed this setting and then applied
     /// `CorsLayer::permissive()` — `Access-Control-Allow-Origin: *` on an IAM
     /// server — so the value never had any effect.
+    #[serde(default, deserialize_with = "comma_separated::deserialize")]
     pub cors_allowed_origins: Vec<String>,
     /// Whether to emit HSTS. Off in development, where there is no TLS.
     pub hsts: bool,
@@ -438,6 +439,40 @@ impl Config {
     }
 }
 
+/// Read a list from either a TOML array or a comma-separated string.
+///
+/// `.env.example` documents `AUTHENC_SECURITY__CORS_ALLOWED_ORIGINS` as
+/// comma-separated, and it is the value `just setup` copies into place — but
+/// figment hands env vars over as plain strings, which do not deserialise into
+/// a `Vec<String>`. Without this, the quickstart in `README.md` fails at
+/// startup for anyone who followed it, empty value included, because even `""`
+/// is a string and not a sequence.
+mod comma_separated {
+    use serde::{Deserialize, Deserializer};
+
+    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum OneOrMany {
+            Many(Vec<String>),
+            One(String),
+        }
+
+        Ok(match OneOrMany::deserialize(deserializer)? {
+            OneOrMany::Many(values) => values,
+            OneOrMany::One(value) => value
+                .split(',')
+                .map(str::trim)
+                .filter(|origin| !origin.is_empty())
+                .map(str::to_owned)
+                .collect(),
+        })
+    }
+}
+
 /// Serialise `Duration` as whole seconds, so TOML and env vars can say `30`.
 mod humantime_secs {
     use std::time::Duration;
@@ -609,5 +644,41 @@ mod tests {
         // must not travel with it.
         let rendered = format!("{:?}", Config::default());
         assert!(!rendered.contains("postgres:postgres"), "got: {rendered}");
+    }
+
+    #[test]
+    fn a_comma_separated_cors_list_is_read_as_a_list() {
+        // `.env.example` documents this setting as comma-separated and
+        // `just setup` copies that file into place. The env provider hands
+        // figment a plain string, which is what this Serialized value is;
+        // without the comma-splitting deserialiser it fails to parse and the
+        // server refuses to start for anyone who followed the README.
+        let config: Config = Figment::from(Serialized::defaults(Config::default()))
+            .merge(Serialized::default(
+                "security.cors_allowed_origins",
+                "https://a.example.com, https://b.example.com",
+            ))
+            .extract()
+            .expect("a comma-separated list deserialises");
+        assert_eq!(
+            config.security.cors_allowed_origins,
+            vec![
+                "https://a.example.com".to_owned(),
+                "https://b.example.com".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn an_empty_cors_value_is_an_empty_list() {
+        // The shipped default is the empty string, which still has to parse.
+        // This is the exact value `.env.example` sets, and the one that
+        // blocked the quickstart before the list was read through a
+        // comma-splitting deserialiser.
+        let config: Config = Figment::from(Serialized::defaults(Config::default()))
+            .merge(Serialized::default("security.cors_allowed_origins", ""))
+            .extract()
+            .expect("an empty value is an empty list, not a parse error");
+        assert!(config.security.cors_allowed_origins.is_empty());
     }
 }
