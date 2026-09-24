@@ -1,0 +1,44 @@
+name: Alerts Dump (temporary)
+
+on:
+  push:
+    branches: [chore/fix-code-scanning-findings]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch open code scanning alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100" \
+            > alerts.json || echo '{"error":"failed"}' > alerts.json
+          echo "count=$(python3 -c 'import json;d=json.load(open("alerts.json"));print(len(d) if isinstance(d,list) else d)' || echo err)"
+          python3 - <<'PY'
+          import json
+          d = json.load(open("alerts.json"))
+          if not isinstance(d, list):
+              print("NOT A LIST:", d)
+          else:
+              for a in d:
+                  r = a.get("rule", {})
+                  inst = a.get("most_recent_instance", {})
+                  loc = inst.get("location", {})
+                  print(a.get("number"), "|", r.get("severity"), "|", r.get("security_severity_level"), "|", r.get("id"), "|", loc.get("path"), ":", loc.get("start_line"), "|", r.get("description"))
+          PY
+      - name: Upload alerts JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: alerts
+          path: alerts.json
+          retention-days: 1
