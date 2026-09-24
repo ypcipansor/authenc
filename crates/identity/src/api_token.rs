@@ -451,12 +451,11 @@ pub async fn purge_expired(db: &Db) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use authenc_contract::model::User;
 
     use crate::{password::PasswordHasher, realm, role, user::NewUser};
     use time::Duration;
-
-    const PASSWORD: &str = "correct horse battery staple";
 
     async fn a_user(db: &Db, realm_id: RealmId, username: &str) -> User {
         user::create(
@@ -466,7 +465,7 @@ mod tests {
                 realm_id,
                 username,
                 email: &format!("{username}@example.com"),
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -522,7 +521,10 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(minted.secret.starts_with(PREFIX), "{}", minted.secret);
+        assert!(
+            minted.secret.starts_with(PREFIX),
+            "a minted token must carry its prefix"
+        );
 
         let actor = authenticate(&db, &minted.secret).await.unwrap().unwrap();
         assert_eq!(actor.user_id, owner.id);

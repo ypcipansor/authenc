@@ -301,7 +301,25 @@ pub async fn purge(db: &Db, audit_older_than_days: Option<u32>) -> Result<()> {
 mod tests {
     use super::*;
 
-    const PASSWORD: &str = "correct horse battery staple";
+    /// A password generated at runtime; see the integration tests for why.
+    fn password() -> &'static str {
+        static P: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        P.get_or_init(|| uuid::Uuid::new_v4().to_string()).as_str()
+    }
+
+    /// A password distinct from [`password`], for a re-seed that must conflict.
+    fn different_password() -> String {
+        let mut p = password().to_owned();
+        p.push_str("-other");
+        p
+    }
+
+    /// A password below the policy's minimum length.
+    fn weak_password() -> String {
+        let mut p = password().to_owned();
+        p.truncate(p.len() - 30);
+        p
+    }
 
     #[sqlx::test(migrations = "../../migrations")]
     async fn seeding_creates_a_realm_an_admin_and_the_admin_role(db: Db) {
@@ -312,7 +330,7 @@ mod tests {
             "master",
             "admin",
             "admin@example.com",
-            PASSWORD,
+            password(),
         )
         .await
         .unwrap();
@@ -326,7 +344,7 @@ mod tests {
             authenc_identity::login::Attempt {
                 realm: "master",
                 identifier: "admin",
-                password: PASSWORD,
+                password: password(),
                 origin: authenc_identity::session::Origin::default(),
             },
         )
@@ -362,7 +380,7 @@ mod tests {
             "master",
             "admin",
             "admin@example.com",
-            PASSWORD,
+            password(),
         )
         .await
         .unwrap();
@@ -373,7 +391,7 @@ mod tests {
             authenc_identity::login::Attempt {
                 realm: "master",
                 identifier: "admin",
-                password: PASSWORD,
+                password: password(),
                 origin: authenc_identity::session::Origin::default(),
             },
         )
@@ -391,7 +409,7 @@ mod tests {
             "master",
             "admin",
             "admin@example.com",
-            PASSWORD,
+            password(),
         )
         .await
         .unwrap();
@@ -402,7 +420,7 @@ mod tests {
             "master",
             "admin",
             "admin@example.com",
-            "a different password entirely",
+            &different_password(),
         )
         .await
         .unwrap_err();
@@ -418,7 +436,7 @@ mod tests {
                 authenc_identity::login::Attempt {
                     realm: "master",
                     identifier: "admin",
-                    password: PASSWORD,
+                    password: password(),
                     origin: authenc_identity::session::Origin::default(),
                 },
             )
@@ -436,7 +454,7 @@ mod tests {
             "master",
             "admin",
             "admin@example.com",
-            "admin",
+            &weak_password(),
         )
         .await
         .unwrap_err();

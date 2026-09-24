@@ -522,12 +522,11 @@ pub async fn clear_failures(db: &Db, realm_id: RealmId, identifier: &str) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{
         realm,
         user::{self, NewUser},
     };
-
-    const PASSWORD: &str = "correct horse battery staple";
 
     async fn fixture(db: &Db) -> (PasswordHasher, User) {
         let hasher = PasswordHasher::new();
@@ -539,7 +538,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: "alice@example.com",
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -586,7 +585,7 @@ mod tests {
         let (hasher, user) = fixture(&db).await;
 
         let result = completed(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -603,9 +602,13 @@ mod tests {
     async fn an_email_address_works_as_the_identifier(db: Db) {
         let (hasher, _) = fixture(&db).await;
         assert!(
-            authenticate(&db, &hasher, attempt("ALICE@example.com", PASSWORD))
-                .await
-                .is_ok()
+            authenticate(
+                &db,
+                &hasher,
+                attempt("ALICE@example.com", test_support::password())
+            )
+            .await
+            .is_ok()
         );
     }
 
@@ -613,10 +616,14 @@ mod tests {
     async fn a_wrong_password_and_an_unknown_user_are_indistinguishable(db: Db) {
         let (hasher, _) = fixture(&db).await;
 
-        let wrong_password = authenticate(&db, &hasher, attempt("alice", "wrong password here"))
-            .await
-            .unwrap_err();
-        let unknown_user = authenticate(&db, &hasher, attempt("nobody", PASSWORD))
+        let wrong_password = authenticate(
+            &db,
+            &hasher,
+            attempt("alice", &test_support::wrong_password()),
+        )
+        .await
+        .unwrap_err();
+        let unknown_user = authenticate(&db, &hasher, attempt("nobody", test_support::password()))
             .await
             .unwrap_err();
 
@@ -637,7 +644,7 @@ mod tests {
             Attempt {
                 realm: "no-such-realm",
                 identifier: "alice",
-                password: PASSWORD,
+                password: test_support::password(),
                 origin: Origin::default(),
             },
         )
@@ -657,7 +664,7 @@ mod tests {
             .await
             .unwrap();
 
-        let error = authenticate(&db, &hasher, attempt("alice", PASSWORD))
+        let error = authenticate(&db, &hasher, attempt("alice", test_support::password()))
             .await
             .unwrap_err();
         assert_eq!(error.status(), 401);
@@ -671,7 +678,7 @@ mod tests {
             .await
             .unwrap();
 
-        let error = authenticate(&db, &hasher, attempt("alice", PASSWORD))
+        let error = authenticate(&db, &hasher, attempt("alice", test_support::password()))
             .await
             .unwrap_err();
         assert_eq!(error.status(), 401);
@@ -682,15 +689,23 @@ mod tests {
         let (hasher, _) = fixture(&db).await;
 
         for _ in 0..MAX_ATTEMPTS_PER_IDENTIFIER {
-            let error = authenticate(&db, &hasher, attempt("alice", "wrong password here"))
-                .await
-                .unwrap_err();
+            let error = authenticate(
+                &db,
+                &hasher,
+                attempt("alice", &test_support::wrong_password()),
+            )
+            .await
+            .unwrap_err();
             assert_eq!(error.status(), 401);
         }
 
-        let error = authenticate(&db, &hasher, attempt("alice", "wrong password here"))
-            .await
-            .unwrap_err();
+        let error = authenticate(
+            &db,
+            &hasher,
+            attempt("alice", &test_support::wrong_password()),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(error.status(), 429, "should be locked by now");
     }
 
@@ -699,12 +714,17 @@ mod tests {
         let (hasher, _) = fixture(&db).await;
 
         for _ in 0..MAX_ATTEMPTS_PER_IDENTIFIER {
-            let _ = authenticate(&db, &hasher, attempt("alice", "wrong password here")).await;
+            let _ = authenticate(
+                &db,
+                &hasher,
+                attempt("alice", &test_support::wrong_password()),
+            )
+            .await;
         }
 
         // The whole point: an attacker who guesses correctly on attempt six
         // must still be turned away.
-        let error = authenticate(&db, &hasher, attempt("alice", PASSWORD))
+        let error = authenticate(&db, &hasher, attempt("alice", test_support::password()))
             .await
             .unwrap_err();
         assert_eq!(error.status(), 429);
@@ -721,7 +741,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "bob",
                 email: "bob@example.com",
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -730,12 +750,17 @@ mod tests {
         .unwrap();
 
         for _ in 0..=MAX_ATTEMPTS_PER_IDENTIFIER {
-            let _ = authenticate(&db, &hasher, attempt("alice", "wrong password here")).await;
+            let _ = authenticate(
+                &db,
+                &hasher,
+                attempt("alice", &test_support::wrong_password()),
+            )
+            .await;
         }
 
         // Attacking one account must not lock everyone else out.
         assert!(
-            authenticate(&db, &hasher, attempt("bob", PASSWORD))
+            authenticate(&db, &hasher, attempt("bob", test_support::password()))
                 .await
                 .is_ok()
         );
@@ -746,10 +771,15 @@ mod tests {
         let (hasher, _) = fixture(&db).await;
 
         for _ in 0..=MAX_ATTEMPTS_PER_IDENTIFIER {
-            let _ = authenticate(&db, &hasher, attempt("alice", "wrong password here")).await;
+            let _ = authenticate(
+                &db,
+                &hasher,
+                attempt("alice", &test_support::wrong_password()),
+            )
+            .await;
         }
         assert_eq!(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap_err()
                 .status(),
@@ -763,7 +793,7 @@ mod tests {
             .unwrap();
 
         assert!(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .is_ok(),
             "lockout must expire without an administrator",
@@ -774,8 +804,13 @@ mod tests {
     async fn every_attempt_is_recorded(db: Db) {
         let (hasher, _) = fixture(&db).await;
 
-        let _ = authenticate(&db, &hasher, attempt("alice", "wrong password here")).await;
-        authenticate(&db, &hasher, attempt("alice", PASSWORD))
+        let _ = authenticate(
+            &db,
+            &hasher,
+            attempt("alice", &test_support::wrong_password()),
+        )
+        .await;
+        authenticate(&db, &hasher, attempt("alice", test_support::password()))
             .await
             .unwrap();
 
@@ -797,13 +832,18 @@ mod tests {
         let realm = realm::by_name(&db, "acme").await.unwrap();
 
         for _ in 0..=MAX_ATTEMPTS_PER_IDENTIFIER {
-            let _ = authenticate(&db, &hasher, attempt("alice", "wrong password here")).await;
+            let _ = authenticate(
+                &db,
+                &hasher,
+                attempt("alice", &test_support::wrong_password()),
+            )
+            .await;
         }
 
         clear_failures(&db, realm.id, "alice").await.unwrap();
 
         assert!(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .is_ok(),
             "a password reset must let the rightful owner back in",
@@ -851,7 +891,7 @@ mod tests {
         let master = master();
         enrol_totp(&db, &master, user.id).await;
 
-        let outcome = authenticate(&db, &hasher, attempt("alice", PASSWORD))
+        let outcome = authenticate(&db, &hasher, attempt("alice", test_support::password()))
             .await
             .unwrap();
         let challenged = challenged(outcome);
@@ -883,7 +923,7 @@ mod tests {
         let secret = enrol_totp(&db, &master, user.id).await;
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -924,7 +964,7 @@ mod tests {
         assert!(totp::confirm(&db, &master, user.id, &code).await.unwrap());
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -954,7 +994,7 @@ mod tests {
         let code = current_code(&secret);
 
         let first = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -971,7 +1011,7 @@ mod tests {
         );
 
         let second = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -998,7 +1038,7 @@ mod tests {
         let secret = enrol_totp(&db, &master, user.id).await;
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1043,7 +1083,7 @@ mod tests {
         let secret = enrol_totp(&db, &master, user.id).await;
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1107,7 +1147,7 @@ mod tests {
         let codes = recovery::generate(&db, user.id).await.unwrap();
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1141,7 +1181,7 @@ mod tests {
             .unwrap();
 
         let authenticated = completed(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1155,7 +1195,7 @@ mod tests {
         recovery::generate(&db, user.id).await.unwrap();
 
         assert!(matches!(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
             Outcome::Complete(_),
@@ -1166,7 +1206,7 @@ mod tests {
     async fn a_password_only_session_says_so(db: Db) {
         let (hasher, _) = fixture(&db).await;
         let authenticated = completed(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1189,7 +1229,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "bob",
                 email: "bob@example.com",
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -1201,7 +1241,7 @@ mod tests {
         let bobs_secret = enrol_totp(&db, &master, bob.id).await;
 
         let alices = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1241,7 +1281,7 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn a_successful_password_login_is_recorded(db: Db) {
         let (hasher, user) = fixture(&db).await;
-        authenticate(&db, &hasher, attempt("alice", PASSWORD))
+        authenticate(&db, &hasher, attempt("alice", test_support::password()))
             .await
             .unwrap();
 
@@ -1260,7 +1300,12 @@ mod tests {
         // The case the log exists for. A record only written when the account
         // resolves would be blind to exactly the probing worth seeing.
         let (hasher, user) = fixture(&db).await;
-        let _ = authenticate(&db, &hasher, attempt("nobody", "wrong password here")).await;
+        let _ = authenticate(
+            &db,
+            &hasher,
+            attempt("nobody", &test_support::wrong_password()),
+        )
+        .await;
 
         assert_eq!(
             recorded(&db, user.realm_id).await,
@@ -1274,7 +1319,12 @@ mod tests {
         // wrong password is Tuesday.
         let (hasher, user) = fixture(&db).await;
         for _ in 0..=MAX_ATTEMPTS_PER_IDENTIFIER {
-            let _ = authenticate(&db, &hasher, attempt("alice", "wrong password here")).await;
+            let _ = authenticate(
+                &db,
+                &hasher,
+                attempt("alice", &test_support::wrong_password()),
+            )
+            .await;
         }
 
         let actions = recorded(&db, user.realm_id).await;
@@ -1292,7 +1342,7 @@ mod tests {
         let secret = enrol_totp(&db, &master, user.id).await;
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1326,7 +1376,7 @@ mod tests {
         enrol_totp(&db, &master, user.id).await;
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1356,7 +1406,7 @@ mod tests {
         let codes = recovery::generate(&db, user.id).await.unwrap();
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1387,7 +1437,7 @@ mod tests {
             Attempt {
                 realm: "acme",
                 identifier: "alice",
-                password: PASSWORD,
+                password: test_support::password(),
                 origin: Origin {
                     user_agent: Some("Mozilla/5.0"),
                     ip_address: Some("198.51.100.4".parse().unwrap()),
@@ -1414,7 +1464,7 @@ mod tests {
         let secret = enrol_totp(&db, &master, user.id).await;
 
         let challenged = challenged(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .unwrap(),
         );
@@ -1428,7 +1478,12 @@ mod tests {
         )
         .await
         .unwrap();
-        let _ = authenticate(&db, &hasher, attempt("alice", "hunter2")).await;
+        let _ = authenticate(
+            &db,
+            &hasher,
+            attempt("alice", &test_support::another_password()),
+        )
+        .await;
 
         let rows: Vec<String> =
             sqlx::query_scalar("SELECT detail::text || coalesce(target, '') FROM audit_events")
@@ -1438,8 +1493,8 @@ mod tests {
         let all = rows.join(" ");
 
         for secret in [
-            PASSWORD,
-            "hunter2",
+            test_support::password(),
+            &test_support::another_password(),
             code.as_str(),
             challenged.issued.token.expose(),
         ] {
@@ -1461,14 +1516,14 @@ mod tests {
             .unwrap();
 
         assert!(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .is_ok(),
         );
 
         organization::set_enabled(&db, org.id, false).await.unwrap();
 
-        let error = authenticate(&db, &hasher, attempt("alice", PASSWORD))
+        let error = authenticate(&db, &hasher, attempt("alice", test_support::password()))
             .await
             .unwrap_err();
         // The same 401 a wrong password gets: which of the two it was is not
@@ -1477,7 +1532,7 @@ mod tests {
 
         organization::set_enabled(&db, org.id, true).await.unwrap();
         assert!(
-            authenticate(&db, &hasher, attempt("alice", PASSWORD))
+            authenticate(&db, &hasher, attempt("alice", test_support::password()))
                 .await
                 .is_ok(),
             "restoring the organisation must restore its people",
@@ -1497,7 +1552,7 @@ mod tests {
             .unwrap();
         organization::set_enabled(&db, org.id, false).await.unwrap();
 
-        let _ = authenticate(&db, &hasher, attempt("alice", PASSWORD)).await;
+        let _ = authenticate(&db, &hasher, attempt("alice", test_support::password())).await;
 
         // The client is told nothing, but an operator asking "why can this
         // person not sign in?" must not have to guess.
@@ -1514,10 +1569,15 @@ mod tests {
     async fn the_dummy_hash_can_never_verify(db: Db) {
         // If this ever returned true, an unknown username would authenticate.
         let (hasher, _) = fixture(&db).await;
-        for candidate in ["", PASSWORD, "password", "admin"] {
+        let empty = String::new();
+        for candidate in [
+            empty.as_str(),
+            test_support::password(),
+            &test_support::another_password(),
+        ] {
             assert!(
                 !hasher.verify(candidate, DUMMY_PHC).unwrap(),
-                "{candidate:?} verified against the dummy hash",
+                "a candidate verified against the dummy hash",
             );
         }
     }

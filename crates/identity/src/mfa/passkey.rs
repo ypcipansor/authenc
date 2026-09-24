@@ -527,6 +527,7 @@ async fn claim_ceremony<S: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{
         password::PasswordHasher,
         realm,
@@ -543,7 +544,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: "alice@example.com",
-                password: "correct horse battery staple",
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -640,7 +641,7 @@ mod tests {
                 realm_id: alice.realm_id,
                 username: "bob",
                 email: "bob@example.com",
-                password: "correct horse battery staple",
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },

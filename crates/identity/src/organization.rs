@@ -751,13 +751,12 @@ pub async fn purge_expired(db: &Db) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{
         password::PasswordHasher,
         realm,
         user::{self, NewUser},
     };
-
-    const PASSWORD: &str = "correct horse battery staple";
 
     async fn a_user(db: &Db, realm_id: RealmId, username: &str) -> User {
         user::create(
@@ -767,7 +766,7 @@ mod tests {
                 realm_id,
                 username,
                 email: &format!("{username}@example.com"),
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },

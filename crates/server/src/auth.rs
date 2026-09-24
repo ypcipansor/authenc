@@ -251,14 +251,14 @@ mod tests {
     // configuration to policy, and the origin check.
 
     #[test]
-    fn only_production_gets_the_locked_down_cookie() {
+    fn only_production_gets_the_host_prefix() {
         for profile in [Profile::Development, Profile::Test] {
             let config = Config {
                 profile,
                 ..Config::default()
             };
             assert_eq!(cookie_policy(&config).name, "authenc_session");
-            assert!(!cookie_policy(&config).secure);
+            assert!(!cookie_policy(&config).host_prefix);
         }
 
         let config = Config {
@@ -266,7 +266,7 @@ mod tests {
             ..Config::default()
         };
         assert_eq!(cookie_policy(&config).name, "__Host-authenc_session");
-        assert!(cookie_policy(&config).secure);
+        assert!(cookie_policy(&config).host_prefix);
     }
 
     #[test]

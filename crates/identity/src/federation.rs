@@ -961,13 +961,12 @@ async fn touch(db: &Db, provider_id: IdentityProviderId, user_id: UserId) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{
         password::PasswordHasher,
         realm,
         user::{self, NewUser},
     };
-
-    const PASSWORD: &str = "correct horse battery staple";
 
     fn claims(subject: &str, email: Option<&str>, verified: bool) -> Claims {
         Claims {
@@ -987,7 +986,7 @@ mod tests {
                 realm_id,
                 username,
                 email: &format!("{username}@example.com"),
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -1110,7 +1109,7 @@ mod tests {
             login::Attempt {
                 realm: "acme",
                 identifier: "alice",
-                password: PASSWORD,
+                password: test_support::password(),
                 origin: Origin::default(),
             },
         )

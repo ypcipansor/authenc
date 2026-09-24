@@ -264,6 +264,7 @@ pub fn token_from_query(query: &str) -> Option<SecretToken> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{
         login::{self, Attempt},
         mail::CapturingMailer,
@@ -271,9 +272,6 @@ mod tests {
         session::Origin,
         user::NewUser,
     };
-
-    const PASSWORD: &str = "correct horse battery staple";
-    const NEW_PASSWORD: &str = "an entirely different passphrase";
 
     async fn fixture(db: &Db) -> (PasswordHasher, RealmId, UserId) {
         let hasher = PasswordHasher::new();
@@ -285,7 +283,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: "alice@example.com",
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -317,9 +315,14 @@ mod tests {
         .await
         .unwrap();
 
-        complete_password_reset(&db, &hasher, &link_token(&mailer), NEW_PASSWORD)
-            .await
-            .unwrap();
+        complete_password_reset(
+            &db,
+            &hasher,
+            &link_token(&mailer),
+            test_support::reset_password(),
+        )
+        .await
+        .unwrap();
 
         let attempt = |password: &'static str| Attempt {
             realm: "acme",
@@ -329,12 +332,12 @@ mod tests {
         };
 
         assert!(
-            login::authenticate(&db, &hasher, attempt(NEW_PASSWORD))
+            login::authenticate(&db, &hasher, attempt(test_support::reset_password()))
                 .await
                 .is_ok()
         );
         assert!(
-            login::authenticate(&db, &hasher, attempt(PASSWORD))
+            login::authenticate(&db, &hasher, attempt(test_support::password()))
                 .await
                 .is_err()
         );
@@ -378,13 +381,14 @@ mod tests {
         .unwrap();
         let token = link_token(&mailer);
 
-        complete_password_reset(&db, &hasher, &token, NEW_PASSWORD)
+        complete_password_reset(&db, &hasher, &token, test_support::reset_password())
             .await
             .unwrap();
 
-        let error = complete_password_reset(&db, &hasher, &token, "yet another passphrase")
-            .await
-            .unwrap_err();
+        let error =
+            complete_password_reset(&db, &hasher, &token, &test_support::another_password())
+                .await
+                .unwrap_err();
         assert_eq!(error.status(), 401, "a spent link must not work again");
     }
 
@@ -407,9 +411,14 @@ mod tests {
             .await
             .unwrap();
 
-        let error = complete_password_reset(&db, &hasher, &link_token(&mailer), NEW_PASSWORD)
-            .await
-            .unwrap_err();
+        let error = complete_password_reset(
+            &db,
+            &hasher,
+            &link_token(&mailer),
+            test_support::reset_password(),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(error.status(), 401);
     }
 
@@ -420,7 +429,7 @@ mod tests {
             &db,
             &hasher,
             &SecretToken::generate().unwrap(),
-            NEW_PASSWORD,
+            test_support::reset_password(),
         )
         .await
         .unwrap_err();
@@ -444,7 +453,7 @@ mod tests {
         let token = link_token(&mailer);
 
         assert_eq!(
-            complete_password_reset(&db, &hasher, &token, "short")
+            complete_password_reset(&db, &hasher, &token, &test_support::short_password())
                 .await
                 .unwrap_err()
                 .status(),
@@ -453,7 +462,7 @@ mod tests {
 
         // The token must not have been spent by the rejected attempt.
         assert!(
-            complete_password_reset(&db, &hasher, &token, NEW_PASSWORD)
+            complete_password_reset(&db, &hasher, &token, test_support::reset_password())
                 .await
                 .is_ok(),
             "a policy failure must not burn the reset link",
@@ -484,9 +493,14 @@ mod tests {
         )
         .await
         .unwrap();
-        complete_password_reset(&db, &hasher, &link_token(&mailer), NEW_PASSWORD)
-            .await
-            .unwrap();
+        complete_password_reset(
+            &db,
+            &hasher,
+            &link_token(&mailer),
+            test_support::reset_password(),
+        )
+        .await
+        .unwrap();
 
         assert!(
             session::lookup(&db, &existing.token)
@@ -509,7 +523,7 @@ mod tests {
                 Attempt {
                     realm: "acme",
                     identifier: "alice",
-                    password: "wrong password here",
+                    password: &test_support::wrong_password(),
                     origin: Origin::default(),
                 },
             )
@@ -525,9 +539,14 @@ mod tests {
         )
         .await
         .unwrap();
-        complete_password_reset(&db, &hasher, &link_token(&mailer), NEW_PASSWORD)
-            .await
-            .unwrap();
+        complete_password_reset(
+            &db,
+            &hasher,
+            &link_token(&mailer),
+            test_support::reset_password(),
+        )
+        .await
+        .unwrap();
 
         assert!(
             login::authenticate(
@@ -536,7 +555,7 @@ mod tests {
                 Attempt {
                     realm: "acme",
                     identifier: "alice",
-                    password: NEW_PASSWORD,
+                    password: test_support::reset_password(),
                     origin: Origin::default(),
                 },
             )
@@ -623,9 +642,14 @@ mod tests {
         )
         .await
         .unwrap();
-        complete_password_reset(&db, &hasher, &link_token(&mailer), NEW_PASSWORD)
-            .await
-            .unwrap();
+        complete_password_reset(
+            &db,
+            &hasher,
+            &link_token(&mailer),
+            test_support::reset_password(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(purge_expired(&db).await.unwrap(), 1);
     }

@@ -872,6 +872,7 @@ impl Directory for LdapClient {
 mod tests {
     use super::*;
     use crate::realm;
+    use crate::test_support;
     use std::sync::Mutex;
 
     /// A [`Directory`] that answers from a script and records what it was
@@ -879,16 +880,16 @@ mod tests {
     /// behaviour is not what these tests are about.
     struct Scripted {
         entry: Option<Entry>,
-        password: &'static str,
+        password: String,
         filters: Mutex<Vec<String>>,
         binds: Mutex<Vec<(String, String)>>,
     }
 
     impl Scripted {
-        fn new(entry: Option<Entry>, password: &'static str) -> Self {
+        fn new(entry: Option<Entry>, password: &str) -> Self {
             Self {
                 entry,
-                password,
+                password: password.to_owned(),
                 filters: Mutex::new(Vec::new()),
                 binds: Mutex::new(Vec::new()),
             }
@@ -911,7 +912,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push((dn.to_owned(), password.to_owned()));
-            Ok(password == self.password)
+            Ok(password == self.password.as_str())
         }
     }
 
@@ -958,22 +959,24 @@ mod tests {
         // The classic LDAP bypass: a simple bind with an empty password is an
         // *anonymous* bind, and a directory answers it with success. A server
         // that forwards one has authenticated nobody as somebody.
-        assert!(Credentials::new("alice", "").is_err());
-        assert!(Credentials::new("alice", "hunter2").is_ok());
+        let blank = String::new();
+        assert!(Credentials::new("alice", &blank).is_err());
+        assert!(Credentials::new("alice", test_support::password()).is_ok());
     }
 
     #[test]
     fn a_password_of_spaces_is_a_password() {
         // Trimming it would authenticate a different string than was typed.
         // What is refused is nothing at all, not whitespace.
-        let credentials = Credentials::new("alice", "   ").unwrap();
-        assert_eq!(credentials.password(), "   ");
+        let typed = test_support::spaces();
+        let credentials = Credentials::new("alice", &typed).unwrap();
+        assert_eq!(credentials.password(), typed.as_str());
     }
 
     #[test]
     fn a_blank_login_is_refused() {
-        assert!(Credentials::new("", "hunter2").is_err());
-        assert!(Credentials::new("   ", "hunter2").is_err());
+        assert!(Credentials::new("", test_support::password()).is_err());
+        assert!(Credentials::new("   ", test_support::password()).is_err());
     }
 
     #[test]
@@ -1103,8 +1106,11 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn a_first_sign_in_provisions_an_account(db: Db) {
         let config = a_directory(&db, true).await;
-        let directory = Scripted::new(Some(an_entry("uid=alice,ou=people,dc=example")), "hunter2");
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let directory = Scripted::new(
+            Some(an_entry("uid=alice,ou=people,dc=example")),
+            test_support::password(),
+        );
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
         let signed_in = authenticate(&db, &directory, &config, &credentials)
             .await
@@ -1122,8 +1128,8 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn the_login_is_escaped_into_the_filter(db: Db) {
         let config = a_directory(&db, true).await;
-        let directory = Scripted::new(None, "hunter2");
-        let credentials = Credentials::new("*)(uid=*", "hunter2").unwrap();
+        let directory = Scripted::new(None, test_support::password());
+        let credentials = Credentials::new("*)(uid=*", test_support::password()).unwrap();
 
         let _ = authenticate(&db, &directory, &config, &credentials).await;
 
@@ -1139,8 +1145,11 @@ mod tests {
         // The order the module documents: authenticate first, resolve second.
         // A wrong password must never reach the provisioning path.
         let config = a_directory(&db, true).await;
-        let directory = Scripted::new(Some(an_entry("uid=alice,ou=people,dc=example")), "hunter2");
-        let credentials = Credentials::new("alice", "wrong").unwrap();
+        let directory = Scripted::new(
+            Some(an_entry("uid=alice,ou=people,dc=example")),
+            test_support::password(),
+        );
+        let credentials = Credentials::new("alice", &test_support::another_password()).unwrap();
 
         assert!(
             authenticate(&db, &directory, &config, &credentials)
@@ -1161,8 +1170,11 @@ mod tests {
         // string happens to resolve to, which is not the entry the search
         // found.
         let config = a_directory(&db, true).await;
-        let directory = Scripted::new(Some(an_entry("uid=alice,ou=people,dc=example")), "hunter2");
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let directory = Scripted::new(
+            Some(an_entry("uid=alice,ou=people,dc=example")),
+            test_support::password(),
+        );
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
         authenticate(&db, &directory, &config, &credentials)
             .await
@@ -1175,8 +1187,11 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn the_second_sign_in_finds_the_same_account(db: Db) {
         let config = a_directory(&db, true).await;
-        let directory = Scripted::new(Some(an_entry("uid=alice,ou=people,dc=example")), "hunter2");
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let directory = Scripted::new(
+            Some(an_entry("uid=alice,ou=people,dc=example")),
+            test_support::password(),
+        );
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
         let first = authenticate(&db, &directory, &config, &credentials)
             .await
@@ -1195,10 +1210,16 @@ mod tests {
         // Two spellings of one DN becoming two local accounts is the failure
         // `normalise_dn` prevents.
         let config = a_directory(&db, true).await;
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
-        let lower = Scripted::new(Some(an_entry("uid=alice,ou=people,dc=example")), "hunter2");
-        let upper = Scripted::new(Some(an_entry("UID=Alice,OU=People,DC=Example")), "hunter2");
+        let lower = Scripted::new(
+            Some(an_entry("uid=alice,ou=people,dc=example")),
+            test_support::password(),
+        );
+        let upper = Scripted::new(
+            Some(an_entry("UID=Alice,OU=People,DC=Example")),
+            test_support::password(),
+        );
 
         let first = authenticate(&db, &lower, &config, &credentials)
             .await
@@ -1214,8 +1235,8 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn an_unknown_account_is_refused(db: Db) {
         let config = a_directory(&db, true).await;
-        let directory = Scripted::new(None, "hunter2");
-        let credentials = Credentials::new("nobody", "hunter2").unwrap();
+        let directory = Scripted::new(None, test_support::password());
+        let credentials = Credentials::new("nobody", test_support::password()).unwrap();
 
         assert!(
             authenticate(&db, &directory, &config, &credentials)
@@ -1227,8 +1248,11 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn provisioning_can_be_refused(db: Db) {
         let config = a_directory(&db, false).await;
-        let directory = Scripted::new(Some(an_entry("uid=alice,ou=people,dc=example")), "hunter2");
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let directory = Scripted::new(
+            Some(an_entry("uid=alice,ou=people,dc=example")),
+            test_support::password(),
+        );
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
         assert!(
             authenticate(&db, &directory, &config, &credentials)
@@ -1241,8 +1265,11 @@ mod tests {
     async fn a_disabled_directory_admits_nobody(db: Db) {
         let config = a_directory(&db, true).await;
         let config = set_enabled(&db, config.id, false).await.unwrap();
-        let directory = Scripted::new(Some(an_entry("uid=alice,ou=people,dc=example")), "hunter2");
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let directory = Scripted::new(
+            Some(an_entry("uid=alice,ou=people,dc=example")),
+            test_support::password(),
+        );
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
         assert!(
             authenticate(&db, &directory, &config, &credentials)
@@ -1254,8 +1281,8 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn an_entry_with_no_dn_is_refused(db: Db) {
         let config = a_directory(&db, true).await;
-        let directory = Scripted::new(Some(an_entry("   ")), "hunter2");
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let directory = Scripted::new(Some(an_entry("   ")), test_support::password());
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
         assert!(
             authenticate(&db, &directory, &config, &credentials)
@@ -1270,8 +1297,8 @@ mod tests {
         let config = a_directory(&db, true).await;
         let mut entry = an_entry("uid=alice,ou=people,dc=example");
         entry.email = None;
-        let directory = Scripted::new(Some(entry), "hunter2");
-        let credentials = Credentials::new("alice", "hunter2").unwrap();
+        let directory = Scripted::new(Some(entry), test_support::password());
+        let credentials = Credentials::new("alice", test_support::password()).unwrap();
 
         assert!(
             authenticate(&db, &directory, &config, &credentials)

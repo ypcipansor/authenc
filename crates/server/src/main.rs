@@ -110,12 +110,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// and unlike the log it is not collected, shipped, or retained by anything.
 /// `print_stdout` is denied across the workspace precisely so that every
 /// exception is a decision — this is the only one.
+///
+/// The secret is written to the stdout handle rather than passed to
+/// `println!`: the formatting macros are logging sinks to static analysis, and
+/// a value that provably must not be logged should not travel through one.
 #[allow(
     clippy::print_stdout,
     reason = "a generated secret must reach the operator without passing through the log"
 )]
 fn print_secret(value: &str) {
-    println!("{value}");
+    use std::io::Write as _;
+
+    let _ = writeln!(std::io::stdout(), "{value}");
 }
 
 /// Run the HTTP server until it is asked to stop.

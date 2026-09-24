@@ -210,6 +210,7 @@ pub async fn purge_expired(db: &Db) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
 
     /// The `amr` of an ordinary password login, which is what these tests are
     /// about; the MFA variants are covered in `crate::mfa`.
@@ -232,7 +233,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: "alice@example.com",
-                password: "correct horse battery staple",
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },

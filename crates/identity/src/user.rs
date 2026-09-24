@@ -414,8 +414,7 @@ pub async fn set_password(
 mod tests {
     use super::*;
     use crate::realm;
-
-    const GOOD_PASSWORD: &str = "correct horse battery staple";
+    use crate::test_support;
 
     async fn realm_and_user(db: &Db) -> (RealmId, User) {
         let hasher = PasswordHasher::new();
@@ -427,7 +426,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: "alice@example.com",
-                password: GOOD_PASSWORD,
+                password: test_support::password(),
                 first_name: Some("Alice"),
                 last_name: None,
             },
@@ -490,7 +489,7 @@ mod tests {
 
         let phc = found.phc.expect("a password was set");
         assert!(phc.starts_with("$argon2id$"));
-        assert!(!phc.contains(GOOD_PASSWORD));
+        assert!(!phc.contains(test_support::password()));
     }
 
     #[sqlx::test(migrations = "../../migrations")]
@@ -505,7 +504,7 @@ mod tests {
                 realm_id,
                 username: "ALICE",
                 email: "other@example.com",
-                password: GOOD_PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -528,7 +527,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "bob",
                 email: "bob@example.com",
-                password: "short",
+                password: &test_support::short_password(),
                 first_name: None,
                 last_name: None,
             },
@@ -557,7 +556,8 @@ mod tests {
             .phc
             .unwrap();
 
-        set_password(&db, &hasher, user.id, "a completely different phrase")
+        let replacement = test_support::another_password();
+        set_password(&db, &hasher, user.id, &replacement)
             .await
             .unwrap();
 
@@ -569,11 +569,7 @@ mod tests {
             .unwrap();
 
         assert_ne!(before, after);
-        assert!(
-            hasher
-                .verify("a completely different phrase", &after)
-                .unwrap()
-        );
-        assert!(!hasher.verify(GOOD_PASSWORD, &after).unwrap());
+        assert!(hasher.verify(&replacement, &after).unwrap());
+        assert!(!hasher.verify(test_support::password(), &after).unwrap());
     }
 }
