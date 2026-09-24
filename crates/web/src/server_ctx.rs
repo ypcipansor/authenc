@@ -16,27 +16,31 @@ use leptos_axum::ResponseOptions;
 
 /// How the session cookie is named and flagged.
 ///
-/// The strictest form cannot simply be hardcoded: the `__Host-` prefix
-/// requires `Secure`, and a browser will not store a `Secure` cookie over
-/// plain HTTP except on localhost. Development therefore gets a plain name,
-/// and production gets the locked-down form — which is safe because
-/// `Config::validate` refuses to start the production profile without an
-/// HTTPS public URL.
+/// The `Secure` attribute is not a choice: every cookie built here carries it,
+/// so a session token is never sent over a plaintext connection. On
+/// `http://localhost` browsers treat the origin as trustworthy and store a
+/// `Secure` cookie anyway, so development still works.
+///
+/// The `__Host-` prefix is what differs. It is the strictest form — bound to
+/// exactly this origin, no `Domain`, `Path=/` — and production gets it. It is
+/// tied to the HTTPS public URL that `Config::validate` demands the production
+/// profile supply before it will start.
 #[derive(Debug, Clone, Copy)]
 pub struct CookiePolicy {
     /// Cookie name.
     pub name: &'static str,
-    /// Whether to set the `Secure` attribute.
-    pub secure: bool,
+    /// Whether the name carries the `__Host-` prefix. Orthogonal to the
+    /// `Secure` attribute, which is always set.
+    pub host_prefix: bool,
 }
 
 impl CookiePolicy {
-    /// The development policy: works over plain HTTP on localhost.
+    /// The development policy: a plain name, still `Secure`.
     #[must_use]
     pub const fn development() -> Self {
         Self {
             name: "authenc_session",
-            secure: false,
+            host_prefix: false,
         }
     }
 
@@ -48,7 +52,7 @@ impl CookiePolicy {
     pub const fn production() -> Self {
         Self {
             name: "__Host-authenc_session",
-            secure: true,
+            host_prefix: true,
         }
     }
 
@@ -59,7 +63,7 @@ impl CookiePolicy {
             // Unreadable from JavaScript, so an injected script has nothing to
             // steal. The previous console kept a JWT in `localStorage`.
             .http_only(true)
-            .secure(self.secure)
+            .secure(true)
             // `Lax` still sends the cookie on top-level navigation, so a link
             // into the console works, but withholds it on cross-site POSTs.
             .same_site(SameSite::Lax)
@@ -73,7 +77,7 @@ impl CookiePolicy {
     pub fn revoke(self) -> Cookie<'static> {
         Cookie::build((self.name, ""))
             .http_only(true)
-            .secure(self.secure)
+            .secure(true)
             .same_site(SameSite::Lax)
             .path("/")
             .max_age(time::Duration::ZERO)
@@ -95,12 +99,12 @@ impl CookiePolicy {
     #[must_use]
     pub const fn ceremony(self) -> Self {
         Self {
-            name: if self.secure {
+            name: if self.host_prefix {
                 "__Host-authenc_ceremony"
             } else {
                 "authenc_ceremony"
             },
-            secure: self.secure,
+            host_prefix: self.host_prefix,
         }
     }
 
@@ -119,12 +123,12 @@ impl CookiePolicy {
     #[must_use]
     pub const fn federation(self) -> Self {
         Self {
-            name: if self.secure {
+            name: if self.host_prefix {
                 "__Host-authenc_federation"
             } else {
                 "authenc_federation"
             },
-            secure: self.secure,
+            host_prefix: self.host_prefix,
         }
     }
 
@@ -139,12 +143,12 @@ impl CookiePolicy {
     #[must_use]
     pub const fn challenge(self) -> Self {
         Self {
-            name: if self.secure {
+            name: if self.host_prefix {
                 "__Host-authenc_mfa"
             } else {
                 "authenc_mfa"
             },
-            secure: self.secure,
+            host_prefix: self.host_prefix,
         }
     }
 }
@@ -362,14 +366,32 @@ mod tests {
     fn development_uses_a_plain_name_so_it_works_over_http() {
         let policy = CookiePolicy::development();
         assert_eq!(policy.name, "authenc_session");
-        assert!(!policy.secure);
+        assert!(!policy.host_prefix);
     }
 
     #[test]
-    fn production_uses_the_host_prefix_and_secure() {
+    fn production_uses_the_host_prefix() {
         let policy = CookiePolicy::production();
         assert_eq!(policy.name, "__Host-authenc_session");
-        assert!(policy.secure, "__Host- is invalid without Secure");
+        assert!(policy.host_prefix, "__Host- is the production spelling");
+    }
+
+    #[test]
+    fn every_cookie_is_secure_whichever_profile_built_it() {
+        // `Secure` is not a profile setting: a session token must never be
+        // eligible for a plaintext request, in development or production.
+        for policy in [CookiePolicy::development(), CookiePolicy::production()] {
+            assert_eq!(
+                policy
+                    .issue(
+                        &SecretToken::from_client("some-token"),
+                        time::Duration::hours(1),
+                    )
+                    .secure(),
+                Some(true)
+            );
+            assert_eq!(policy.revoke().secure(), Some(true));
+        }
     }
 
     #[test]

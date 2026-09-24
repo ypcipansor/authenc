@@ -117,6 +117,7 @@ pub async fn revoke(db: &Db, user_id: UserId, client: ClientKey) -> Result<bool>
 mod tests {
     use super::*;
     use crate::client::{self, NewClient};
+    use crate::test_support;
     use authenc_identity::{PasswordHasher, realm, user::NewUser};
 
     fn owned(values: &[&str]) -> Vec<String> {
@@ -133,7 +134,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "ada",
                 email: "ada@example.com",
-                password: "correct horse battery staple",
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },

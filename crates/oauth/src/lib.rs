@@ -40,6 +40,9 @@ pub mod scope;
 pub mod social;
 pub mod token;
 
+#[cfg(test)]
+pub mod test_support;
+
 pub use client::Client;
 pub use error::{OAuthError, OAuthErrorCode};
 pub use keyring::MasterKey;

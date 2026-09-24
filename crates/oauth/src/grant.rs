@@ -219,6 +219,7 @@ pub async fn userinfo(db: &Db, user_id: UserId, scopes: &[String]) -> Result<ser
 )]
 mod tests {
     use super::*;
+    use crate::test_support;
 
     /// The `amr` of an ordinary password login, which is what these fixtures
     /// stand in for. The MFA variants are exercised in `authenc-identity`.
@@ -253,7 +254,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "ada",
                 email: "ada@example.com",
-                password: "correct horse battery staple",
+                password: test_support::password(),
                 first_name: Some("Ada"),
                 last_name: Some("Lovelace"),
             },

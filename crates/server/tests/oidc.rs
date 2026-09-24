@@ -27,10 +27,19 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
-const PASSWORD: &str = "correct horse battery staple";
 const REDIRECT_URI: &str = "https://app.example.com/callback";
 const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
+/// A password generated at runtime.
+///
+/// Tests are the one place a credential can be written down; generating it
+/// instead keeps the fixture from looking like — or becoming — an embedded
+/// secret. Stable for the process, so the same value is used to create an
+/// account and to sign in as it.
+fn password() -> &'static str {
+    static P: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    P.get_or_init(|| uuid::Uuid::new_v4().to_string()).as_str()
+}
 fn challenge() -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(VERIFIER.as_bytes()))
 }
@@ -93,7 +102,7 @@ async fn seed(db: &Db, client_id: &str, is_public: bool) -> Fixture {
                 realm_id: realm.id,
                 username: "ada",
                 email: "ada@example.com",
-                password: PASSWORD,
+                password: password(),
                 first_name: Some("Ada"),
                 last_name: Some("Lovelace"),
             },
@@ -139,7 +148,7 @@ async fn sign_in(server: &TestServer) {
     server
         .post("/api/sfn/login")
         .json(&json!({
-            "request": { "realm": "master", "identifier": "ada", "password": PASSWORD }
+            "request": { "realm": "master", "identifier": "ada", "password": password() }
         }))
         .expect_success()
         .await;

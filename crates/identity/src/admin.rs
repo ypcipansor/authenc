@@ -1048,9 +1048,8 @@ pub async fn own_realm(db: &Db, actor: &Actor) -> Result<Realm> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{realm, user::NewUser};
-
-    const PASSWORD: &str = "correct horse battery staple";
 
     /// An actor in `realm_id` holding exactly `permissions`.
     fn actor(realm_id: RealmId, user_id: UserId, permissions: &[Permission]) -> Actor {
@@ -1073,7 +1072,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: &format!("alice@{slug}.example"),
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -1159,7 +1158,7 @@ mod tests {
                 realm_id,
                 username: "bob",
                 email: "bob@acme.example",
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -1218,7 +1217,7 @@ mod tests {
                     realm_id,
                     username: &format!("user{n}"),
                     email: &format!("user{n}@acme.example"),
-                    password: PASSWORD,
+                    password: test_support::password(),
                     first_name: None,
                     last_name: None,
                 },
@@ -1367,7 +1366,7 @@ mod tests {
                     realm_id,
                     username: "carol",
                     email: "carol@acme.example",
-                    password: PASSWORD,
+                    password: test_support::password(),
                     first_name: None,
                     last_name: None,
                 },
@@ -1397,7 +1396,7 @@ mod tests {
                 realm_id: actor.realm_id,
                 username: "bob",
                 email: "bob@example.com",
-                password: "correct horse battery staple",
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },
@@ -1708,7 +1707,7 @@ mod tests {
                 realm_id,
                 username: "bob",
                 email: "bob@example.com",
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },

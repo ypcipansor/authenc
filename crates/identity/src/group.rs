@@ -463,14 +463,13 @@ pub async fn roles(db: &Db, group_id: GroupId) -> Result<Vec<Role>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{
         password::PasswordHasher,
         realm, role,
         user::{self, NewUser},
     };
     use authenc_contract::{Permission, model::User};
-
-    const PASSWORD: &str = "correct horse battery staple";
 
     async fn a_realm_with_a_user(db: &Db, slug: &str) -> (RealmId, User) {
         let hasher = PasswordHasher::new();
@@ -482,7 +481,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: &format!("alice@{slug}.example"),
-                password: PASSWORD,
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },

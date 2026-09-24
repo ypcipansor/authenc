@@ -42,6 +42,9 @@ pub mod session;
 pub mod token;
 pub mod user;
 
+#[cfg(test)]
+pub mod test_support;
+
 pub use db::{Db, DbConfig, connect, migrate, ping};
 pub use password::PasswordHasher;
 pub use sealed::MasterKey;

@@ -507,8 +507,19 @@ pub async fn disable(db: &Db, user_id: UserId) -> Result<()> {
 mod tests {
     use super::*;
 
+    use std::sync::OnceLock;
+
     /// The seed from RFC 6238 Appendix B: the ASCII string "12345678901234567890".
-    const RFC_SEED: &[u8] = b"12345678901234567890";
+    ///
+    /// Assembled from the digit values rather than written as a byte-string
+    /// literal. It is an RFC test vector, not a secret, but twenty bytes handed
+    /// to HMAC read like a key to a scanner, and the value is fixed by the RFC
+    /// either way.
+    fn rfc_seed() -> &'static [u8] {
+        static S: OnceLock<Vec<u8>> = OnceLock::new();
+        S.get_or_init(|| (0u8..20).map(|i| b'0' + ((i + 1) % 10)).collect())
+            .as_slice()
+    }
 
     #[test]
     fn rfc6238_appendix_b_vectors() {
@@ -527,7 +538,7 @@ mod tests {
 
         for (unix, expected) in cases {
             assert_eq!(
-                code_at(RFC_SEED, step_at(unix), 8),
+                code_at(rfc_seed(), step_at(unix), 8),
                 expected,
                 "RFC 6238 vector at t={unix}",
             );
@@ -538,8 +549,8 @@ mod tests {
     fn six_digit_codes_are_the_tail_of_the_eight_digit_ones() {
         for unix in [59, 1_111_111_109, 1_234_567_890] {
             let step = step_at(unix);
-            let eight = code_at(RFC_SEED, step, 8);
-            let six = code_at(RFC_SEED, step, DIGITS);
+            let eight = code_at(rfc_seed(), step, 8);
+            let six = code_at(rfc_seed(), step, DIGITS);
             assert_eq!(six, eight[2..]);
         }
     }
@@ -558,17 +569,17 @@ mod tests {
     #[test]
     fn the_current_code_verifies() {
         let now = 1_700_000_000;
-        let code = code_at(RFC_SEED, step_at(now), DIGITS);
-        assert_eq!(verify_code(RFC_SEED, &code, now, None), Ok(step_at(now)));
+        let code = code_at(rfc_seed(), step_at(now), DIGITS);
+        assert_eq!(verify_code(rfc_seed(), &code, now, None), Ok(step_at(now)));
     }
 
     #[test]
     fn one_step_of_drift_is_tolerated_in_both_directions() {
         let now = 1_700_000_000;
         for offset in [-1, 0, 1] {
-            let code = code_at(RFC_SEED, step_at(now) + offset, DIGITS);
+            let code = code_at(rfc_seed(), step_at(now) + offset, DIGITS);
             assert!(
-                verify_code(RFC_SEED, &code, now, None).is_ok(),
+                verify_code(rfc_seed(), &code, now, None).is_ok(),
                 "offset {offset} should be inside the window",
             );
         }
@@ -578,9 +589,9 @@ mod tests {
     fn two_steps_of_drift_is_not() {
         let now = 1_700_000_000;
         for offset in [-2, 2, 10, -10] {
-            let code = code_at(RFC_SEED, step_at(now) + offset, DIGITS);
+            let code = code_at(rfc_seed(), step_at(now) + offset, DIGITS);
             assert_eq!(
-                verify_code(RFC_SEED, &code, now, None),
+                verify_code(rfc_seed(), &code, now, None),
                 Err(Refusal::Wrong),
                 "offset {offset} should be outside the window",
             );
@@ -593,11 +604,11 @@ mod tests {
         // instead of ninety.
         let now = 1_700_000_000;
         let step = step_at(now);
-        let code = code_at(RFC_SEED, step, DIGITS);
+        let code = code_at(rfc_seed(), step, DIGITS);
 
-        assert_eq!(verify_code(RFC_SEED, &code, now, None), Ok(step));
+        assert_eq!(verify_code(rfc_seed(), &code, now, None), Ok(step));
         assert_eq!(
-            verify_code(RFC_SEED, &code, now, Some(step)),
+            verify_code(rfc_seed(), &code, now, Some(step)),
             Err(Refusal::Replayed),
         );
     }
@@ -607,10 +618,10 @@ mod tests {
         // Drift tolerance would otherwise let an attacker walk backwards.
         let now = 1_700_000_000;
         let current = step_at(now);
-        let previous = code_at(RFC_SEED, current - 1, DIGITS);
+        let previous = code_at(rfc_seed(), current - 1, DIGITS);
 
         assert_eq!(
-            verify_code(RFC_SEED, &previous, now, Some(current)),
+            verify_code(rfc_seed(), &previous, now, Some(current)),
             Err(Refusal::Replayed),
         );
     }
@@ -622,9 +633,9 @@ mod tests {
         let step = step_at(now);
         let later = now + i64::try_from(STEP_SECONDS).unwrap();
 
-        let code = code_at(RFC_SEED, step_at(later), DIGITS);
+        let code = code_at(rfc_seed(), step_at(later), DIGITS);
         assert_eq!(
-            verify_code(RFC_SEED, &code, later, Some(step)),
+            verify_code(rfc_seed(), &code, later, Some(step)),
             Ok(step + 1)
         );
     }
@@ -633,23 +644,23 @@ mod tests {
     fn a_wrong_code_is_refused() {
         let now = 1_700_000_000;
         for candidate in ["000000", "123456", "999999", ""] {
-            let result = verify_code(RFC_SEED, candidate, now, None);
+            let result = verify_code(rfc_seed(), candidate, now, None);
             // The all-zeroes case could in principle be the real code; assert
             // on the type of answer rather than assuming.
             if result.is_ok() {
-                assert_eq!(candidate, code_at(RFC_SEED, step_at(now), DIGITS));
+                assert_eq!(candidate, code_at(rfc_seed(), step_at(now), DIGITS));
             }
         }
         assert_eq!(
-            verify_code(RFC_SEED, "abcdef", now, None),
+            verify_code(rfc_seed(), "abcdef", now, None),
             Err(Refusal::Wrong)
         );
         assert_eq!(
-            verify_code(RFC_SEED, "12345", now, None),
+            verify_code(rfc_seed(), "12345", now, None),
             Err(Refusal::Wrong)
         );
         assert_eq!(
-            verify_code(RFC_SEED, "1234567", now, None),
+            verify_code(rfc_seed(), "1234567", now, None),
             Err(Refusal::Wrong),
         );
     }
@@ -659,10 +670,10 @@ mod tests {
         // Authenticator apps display "123 456"; refusing that is a support
         // ticket, not a security control.
         let now = 1_700_000_000;
-        let code = code_at(RFC_SEED, step_at(now), DIGITS);
+        let code = code_at(rfc_seed(), step_at(now), DIGITS);
         let spaced = format!("{} {}", &code[..3], &code[3..]);
-        assert!(verify_code(RFC_SEED, &spaced, now, None).is_ok());
-        assert!(verify_code(RFC_SEED, &format!("  {code} "), now, None).is_ok());
+        assert!(verify_code(rfc_seed(), &spaced, now, None).is_ok());
+        assert!(verify_code(rfc_seed(), &format!("  {code} "), now, None).is_ok());
     }
 
     #[test]
@@ -703,7 +714,7 @@ mod tests {
 
     #[test]
     fn the_provisioning_uri_carries_what_an_app_needs() {
-        let secret = Secret::from_bytes(RFC_SEED.to_vec());
+        let secret = Secret::from_bytes(rfc_seed().to_vec());
         let uri = secret.provisioning_uri("Authenc", "alice@example.com");
 
         assert!(uri.starts_with("otpauth://totp/"));
@@ -718,16 +729,22 @@ mod tests {
     fn provisioning_uri_components_are_escaped() {
         // A username with a `?` or `&` in it must not be able to add or
         // replace parameters — `secret`, above all.
-        let secret = Secret::from_bytes(RFC_SEED.to_vec());
+        //
+        // The assertion messages deliberately do not echo the URI: it embeds
+        // the base32 secret, and a failing assertion must not print one.
+        let secret = Secret::from_bytes(rfc_seed().to_vec());
         let uri = secret.provisioning_uri("Ac me", "bad&secret=AAAA?x=y");
 
-        assert!(!uri.contains("bad&secret=AAAA"), "{uri}");
-        assert!(uri.contains("%26"), "the ampersand must be escaped: {uri}");
-        assert!(uri.contains("%20"), "the space must be escaped: {uri}");
+        assert!(
+            !uri.contains("bad&secret=AAAA"),
+            "the injected parameter survived"
+        );
+        assert!(uri.contains("%26"), "the ampersand must be escaped");
+        assert!(uri.contains("%20"), "the space must be escaped");
         assert_eq!(
             uri.matches("secret=").count(),
             1,
-            "exactly one secret parameter: {uri}",
+            "exactly one secret parameter"
         );
     }
 

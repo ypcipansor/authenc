@@ -118,21 +118,23 @@ impl std::error::Error for HashError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
 
     #[test]
     fn hashes_verify_against_the_original_password() {
         let hasher = PasswordHasher::new();
-        let phc = hasher.hash("correct horse battery staple").unwrap();
-        assert!(hasher.verify("correct horse battery staple", &phc).unwrap());
+        let password = test_support::password();
+        let phc = hasher.hash(password).unwrap();
+        assert!(hasher.verify(password, &phc).unwrap());
     }
 
     #[test]
     fn wrong_password_returns_false_not_error() {
         let hasher = PasswordHasher::new();
-        let phc = hasher.hash("correct horse battery staple").unwrap();
+        let phc = hasher.hash(test_support::password()).unwrap();
         assert!(
             !hasher
-                .verify("incorrect horse battery staple", &phc)
+                .verify(&test_support::another_password(), &phc)
                 .unwrap()
         );
     }
@@ -140,15 +142,16 @@ mod tests {
     #[test]
     fn the_same_password_hashes_differently_each_time() {
         let hasher = PasswordHasher::new();
-        let a = hasher.hash("correct horse battery staple").unwrap();
-        let b = hasher.hash("correct horse battery staple").unwrap();
+        let password = test_support::password();
+        let a = hasher.hash(password).unwrap();
+        let b = hasher.hash(password).unwrap();
         assert_ne!(a, b, "salts must differ");
     }
 
     #[test]
     fn hashes_are_argon2id_with_policy_parameters() {
         let phc = PasswordHasher::new()
-            .hash("correct horse battery staple")
+            .hash(test_support::password())
             .unwrap();
         assert!(phc.starts_with("$argon2id$"), "got {phc}");
         assert!(phc.contains(&format!("m={MEMORY_KIB}")));
@@ -158,15 +161,16 @@ mod tests {
     #[test]
     fn a_malformed_stored_hash_is_an_error_not_a_successful_login() {
         let hasher = PasswordHasher::new();
+        let candidate = test_support::password();
         // The critical property: this must never be `Ok(true)`.
-        assert!(hasher.verify("anything", "not-a-phc-string").is_err());
-        assert!(hasher.verify("anything", "").is_err());
+        assert!(hasher.verify(candidate, "not-a-phc-string").is_err());
+        assert!(hasher.verify(candidate, "").is_err());
     }
 
     #[test]
     fn current_hashes_do_not_need_rehashing() {
         let hasher = PasswordHasher::new();
-        let phc = hasher.hash("correct horse battery staple").unwrap();
+        let phc = hasher.hash(test_support::password()).unwrap();
         assert!(!hasher.needs_rehash(&phc));
     }
 
@@ -178,7 +182,7 @@ mod tests {
         let weak = Argon2::new(Algorithm::Argon2id, Version::V0x13, weak_params);
         let salt = SaltString::generate(&mut OsRng);
         let weak_phc = weak
-            .hash_password(b"correct horse battery staple", &salt)
+            .hash_password(test_support::password().as_bytes(), &salt)
             .unwrap()
             .to_string();
 

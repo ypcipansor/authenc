@@ -20,8 +20,16 @@ use leptos::prelude::LeptosOptions;
 use serde_json::json;
 use sqlx::PgPool;
 
-const PASSWORD: &str = "correct horse battery staple";
-
+/// A password generated at runtime.
+///
+/// Tests are the one place a credential can be written down; generating it
+/// instead keeps the fixture from looking like — or becoming — an embedded
+/// secret. Stable for the process, so the same value is used to create an
+/// account and to sign in as it.
+fn password() -> &'static str {
+    static P: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    P.get_or_init(|| uuid::Uuid::new_v4().to_string()).as_str()
+}
 fn server(db: Db) -> TestServer {
     let leptos_options = LeptosOptions::builder()
         .output_name("authenc")
@@ -59,7 +67,7 @@ async fn seed_with(db: &Db, username: &str, permissions: &[Permission]) {
             realm_id: realm.id,
             username,
             email: &format!("{username}@example.com"),
-            password: PASSWORD,
+            password: password(),
             first_name: None,
             last_name: None,
         },
@@ -81,7 +89,7 @@ async fn sign_in(server: &mut TestServer, username: &str) {
     server
         .post("/api/sfn/login")
         .json(&json!({
-            "request": { "realm": "master", "identifier": username, "password": PASSWORD }
+            "request": { "realm": "master", "identifier": username, "password": password() }
         }))
         .await
         .assert_status_ok();
@@ -183,7 +191,7 @@ async fn read_permission_does_not_confer_write(db: PgPool) {
         .json(&json!({
             "username": "carol",
             "email": "carol@example.com",
-            "password": PASSWORD,
+            "password": password(),
         }))
         .await
         .assert_status(StatusCode::FORBIDDEN);
@@ -213,7 +221,7 @@ async fn an_administrator_can_run_the_full_user_lifecycle(db: PgPool) {
         .json(&json!({
             "username": "carol",
             "email": "carol@example.com",
-            "password": PASSWORD,
+            "password": password(),
             "first_name": "Carol",
         }))
         .await;
@@ -258,7 +266,7 @@ async fn a_created_user_never_carries_a_credential_in_the_response(db: PgPool) {
         .json(&json!({
             "username": "carol",
             "email": "carol@example.com",
-            "password": PASSWORD,
+            "password": password(),
         }))
         .await;
 
@@ -421,7 +429,7 @@ async fn hiding_an_action_is_a_hint_not_the_check(db: PgPool) {
         .json(&json!({
             "username": "carol",
             "email": "carol@example.com",
-            "password": PASSWORD,
+            "password": password(),
         }))
         .await
         .assert_status(StatusCode::FORBIDDEN);
@@ -926,7 +934,7 @@ async fn group_membership_changes_what_a_user_may_do(db: PgPool) {
             realm_id: realm.id,
             username: "bob",
             email: "bob@example.com",
-            password: PASSWORD,
+            password: password(),
             first_name: None,
             last_name: None,
         },
@@ -1108,7 +1116,7 @@ async fn suspending_an_organisation_stops_its_members_signing_in_over_http(db: P
             realm_id: realm.id,
             username: "bob",
             email: "bob@example.com",
-            password: PASSWORD,
+            password: password(),
             first_name: None,
             last_name: None,
         },
@@ -1135,7 +1143,7 @@ async fn suspending_an_organisation_stops_its_members_signing_in_over_http(db: P
         .assert_status(StatusCode::NO_CONTENT);
 
     let login = json!({
-        "request": { "realm": "master", "identifier": "bob", "password": PASSWORD }
+        "request": { "realm": "master", "identifier": "bob", "password": password() }
     });
 
     server(db.clone())
@@ -1501,7 +1509,7 @@ async fn suspending_an_organisation_from_the_console_stops_its_members_signing_i
         .assert_status(StatusCode::NO_CONTENT);
 
     let login = json!({
-        "request": { "realm": "master", "identifier": "tenant", "password": PASSWORD }
+        "request": { "realm": "master", "identifier": "tenant", "password": password() }
     });
 
     // The credentials work before the suspension. Without this half, the

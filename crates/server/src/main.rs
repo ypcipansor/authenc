@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         Command::GenerateMasterKey => {
             let key = authenc_identity::MasterKey::generate()?;
-            print_secret(&key.to_base64());
+            print_secret(&key.to_base64())?;
         }
 
         Command::RotateKeys {
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .await?;
 
             match secret {
-                Some(secret) => print_secret(&secret),
+                Some(secret) => print_secret(&secret)?,
                 None => tracing::info!("public client registered; no secret was issued"),
             }
         }
@@ -110,12 +110,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// and unlike the log it is not collected, shipped, or retained by anything.
 /// `print_stdout` is denied across the workspace precisely so that every
 /// exception is a decision — this is the only one.
+///
+/// The bytes reach the stdout handle directly rather than through a formatting
+/// macro, which static analysis treats as a logging sink: a value that
+/// provably must not be logged should not travel through one.
+///
+/// The write result is returned, not discarded. A secret is shown once — the
+/// client's is stored only as a hash — so if stdout cannot deliver it the
+/// command must fail loudly rather than report success and lose the value.
 #[allow(
     clippy::print_stdout,
     reason = "a generated secret must reach the operator without passing through the log"
 )]
-fn print_secret(value: &str) {
-    println!("{value}");
+fn print_secret(value: &str) -> std::io::Result<()> {
+    write_secret(&mut std::io::stdout(), value)
+}
+
+/// Write `value` and a trailing newline to `writer`.
+///
+/// Split from [`print_secret`] so the failure path can be tested with a writer
+/// that refuses, which stdout cannot be asked to do on demand.
+fn write_secret(writer: &mut impl std::io::Write, value: &str) -> std::io::Result<()> {
+    writer.write_all(value.as_bytes())?;
+    writer.write_all(b"\n")
 }
 
 /// Run the HTTP server until it is asked to stop.
@@ -212,5 +229,42 @@ async fn shutdown_signal() {
     tokio::select! {
         () = ctrl_c => tracing::info!("received ctrl-c, shutting down"),
         () = terminate => tracing::info!("received SIGTERM, shutting down"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{ErrorKind, Write};
+
+    /// A writer that refuses every write, the way stdout does when its
+    /// consumer is gone or the filesystem behind it is full.
+    struct Refusing;
+
+    impl Write for Refusing {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(ErrorKind::BrokenPipe, "no consumer"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_secret_that_cannot_be_written_is_an_error_not_a_silent_success() {
+        // The property the CLI depends on: a registered client's secret is
+        // stored only as a hash, so if stdout cannot carry it the command must
+        // not exit successfully — the credential would be unrecoverable.
+        let secret = uuid::Uuid::new_v4().to_string();
+        assert!(write_secret(&mut Refusing, &secret).is_err());
+    }
+
+    #[test]
+    fn a_written_secret_is_the_value_and_a_trailing_newline() {
+        let secret = uuid::Uuid::new_v4().to_string();
+        let mut buffer = Vec::new();
+        write_secret(&mut buffer, &secret).unwrap();
+        assert_eq!(buffer, format!("{secret}\n").into_bytes());
     }
 }

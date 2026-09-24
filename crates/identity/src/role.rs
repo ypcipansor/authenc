@@ -165,6 +165,7 @@ pub async fn revoke(db: &Db, user_id: UserId, role_id: RoleId) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::{
         password::PasswordHasher,
         realm,
@@ -182,7 +183,7 @@ mod tests {
                 realm_id: realm.id,
                 username: "alice",
                 email: "alice@example.com",
-                password: "correct horse battery staple",
+                password: test_support::password(),
                 first_name: None,
                 last_name: None,
             },

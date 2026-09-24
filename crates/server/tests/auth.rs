@@ -20,7 +20,23 @@ use leptos::prelude::LeptosOptions;
 use serde_json::json;
 use sqlx::PgPool;
 
-const PASSWORD: &str = "correct horse battery staple";
+/// A password generated at runtime.
+///
+/// Tests are the one place a credential can be written down; generating it
+/// instead keeps the fixture from looking like — or becoming — an embedded
+/// secret. Stable for the process, so the same value is used to create an
+/// account and to sign in as it.
+fn password() -> &'static str {
+    static P: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    P.get_or_init(|| uuid::Uuid::new_v4().to_string()).as_str()
+}
+
+/// A password that will not match any account, generated at runtime.
+fn wrong_password() -> String {
+    let mut p = password().to_owned();
+    p.push_str("-wrong");
+    p
+}
 
 fn server(db: Db) -> TestServer {
     let leptos_options = LeptosOptions::builder()
@@ -55,7 +71,7 @@ async fn seed(db: &Db) {
             realm_id: realm.id,
             username: "alice",
             email: "alice@example.com",
-            password: PASSWORD,
+            password: password(),
             first_name: None,
             last_name: None,
         },
@@ -74,7 +90,7 @@ async fn a_correct_login_sets_an_http_only_session_cookie(db: PgPool) {
 
     let response = server(db)
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await;
 
     response.assert_status_ok();
@@ -99,7 +115,7 @@ async fn the_login_response_body_carries_no_credential(db: PgPool) {
 
     let response = server(db)
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await;
 
     let body = response.text();
@@ -118,7 +134,7 @@ async fn a_session_cookie_identifies_the_user_on_the_next_request(db: PgPool) {
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -148,7 +164,7 @@ async fn logging_out_clears_the_cookie_and_the_session(db: PgPool) {
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -173,7 +189,7 @@ async fn a_wrong_password_is_rejected_without_a_cookie(db: PgPool) {
 
     let response = server(db)
         .post("/api/sfn/login")
-        .json(&login_body("alice", "wrong password here"))
+        .json(&login_body("alice", &wrong_password()))
         .await;
 
     // 401 specifically: asserting merely "not 200" would also pass on a 500
@@ -193,11 +209,11 @@ async fn a_failed_login_does_not_reveal_whether_the_account_exists(db: PgPool) {
 
     let wrong_password = server
         .post("/api/sfn/login")
-        .json(&login_body("alice", "wrong password here"))
+        .json(&login_body("alice", &wrong_password()))
         .await;
     let unknown_user = server
         .post("/api/sfn/login")
-        .json(&login_body("nobody", PASSWORD))
+        .json(&login_body("nobody", password()))
         .await;
 
     assert_eq!(wrong_password.status_code(), unknown_user.status_code());
@@ -212,14 +228,14 @@ async fn repeated_failures_are_rate_limited_over_http(db: PgPool) {
     for _ in 0..authenc_identity::login::MAX_ATTEMPTS_PER_IDENTIFIER {
         server
             .post("/api/sfn/login")
-            .json(&login_body("alice", "wrong password here"))
+            .json(&login_body("alice", &wrong_password()))
             .await;
     }
 
     // Even the correct password must now be refused.
     let response = server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await;
 
     response.assert_status(StatusCode::TOO_MANY_REQUESTS);
@@ -383,7 +399,7 @@ async fn a_password_alone_sets_no_session_cookie_when_a_factor_is_enrolled(db: P
 
     let response = server(db)
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await;
 
     response.assert_status_ok();
@@ -420,7 +436,7 @@ async fn the_session_endpoint_reports_nobody_until_the_second_factor(db: PgPool)
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -438,7 +454,7 @@ async fn a_correct_code_finishes_the_login_over_http(db: PgPool) {
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -465,7 +481,7 @@ async fn a_wrong_code_does_not_finish_the_login(db: PgPool) {
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -503,7 +519,7 @@ async fn a_login_with_no_second_factor_still_signs_in(db: PgPool) {
 
     let response = server(db)
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await;
 
     response.assert_status_ok();
@@ -530,7 +546,7 @@ async fn a_recovery_code_finishes_the_login_and_is_then_spent(db: PgPool) {
     let server = server(db);
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -544,7 +560,7 @@ async fn a_recovery_code_finishes_the_login_and_is_then_spent(db: PgPool) {
     server.post("/api/sfn/logout").await.assert_status_ok();
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -588,7 +604,7 @@ async fn enrolling_an_authenticator_over_http_issues_recovery_codes(db: PgPool) 
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -665,7 +681,7 @@ async fn the_security_page_renders_server_side_for_a_signed_in_user(db: PgPool) 
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -698,7 +714,7 @@ async fn a_cross_site_server_function_call_is_refused(db: PgPool) {
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -725,7 +741,7 @@ async fn a_forged_origin_header_is_refused_too(db: PgPool) {
 
     server
         .post("/api/sfn/login")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
@@ -752,7 +768,7 @@ async fn the_console_s_own_calls_are_not_refused(db: PgPool) {
     server
         .post("/api/sfn/login")
         .add_header("sec-fetch-site", "same-origin")
-        .json(&login_body("alice", PASSWORD))
+        .json(&login_body("alice", password()))
         .await
         .assert_status_ok();
 
