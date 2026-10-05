@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-FROM rust:1.98-bookworm AS builder
+FROM rust:1.99-bookworm AS builder
 
 # `webauthn-rs-core` links against OpenSSL. It is the one C dependency in the
 # tree and the one exception in `deny.toml`; see the note there for why it is
